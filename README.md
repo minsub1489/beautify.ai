@@ -46,3 +46,4 @@ git push -u origin main
 
 ## 주의
 기존에 노출된 API 키/시크릿이 있다면 즉시 재발급(rotate)하세요.
+
