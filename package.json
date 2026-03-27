@@ -1,0 +1,34 @@
+{
+  "name": "ai-note-studio-v3-deployable",
+  "version": "0.3.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "prisma generate && next build",
+    "start": "next start -p 3000",
+    "lint": "next lint",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@notionhq/client": "^2.2.15",
+    "@prisma/client": "^6.6.0",
+    "@vercel/blob": "^0.27.0",
+    "lucide-react": "^0.511.0",
+    "next": "15.2.4",
+    "next-auth": "^4.24.13",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "^1.1.1",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "prisma": "^6.6.0",
+    "typescript": "^5.8.2"
+  }
+}
