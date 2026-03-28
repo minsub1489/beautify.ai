@@ -9,6 +9,9 @@ type GeminiPart = {
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const TOGETHER_API_URL = 'https://api.together.xyz/v1/chat/completions';
+const HUGGINGFACE_API_URL = 'https://api-inference.huggingface.co/models';
 
 export const GEMINI_MODELS = {
   text: process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash-lite',
@@ -24,6 +27,21 @@ export const OPENROUTER_MODELS = {
 export const OPENAI_MODELS = {
   text: process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
   reasoning: process.env.OPENAI_REASONING_MODEL || 'gpt-4o-mini',
+} as const;
+
+export const GROQ_MODELS = {
+  text: process.env.GROQ_TEXT_MODEL || 'llama-3.1-8b-instant',
+  reasoning: process.env.GROQ_REASONING_MODEL || 'llama-3.3-70b-versatile',
+} as const;
+
+export const TOGETHER_MODELS = {
+  text: process.env.TOGETHER_TEXT_MODEL || 'meta-llama/Llama-3.1-8B-Instruct-Turbo',
+  reasoning: process.env.TOGETHER_REASONING_MODEL || 'meta-llama/Llama-3.1-70B-Instruct-Turbo',
+} as const;
+
+export const HUGGINGFACE_MODELS = {
+  text: process.env.HUGGINGFACE_TEXT_MODEL || 'HuggingFaceH4/zephyr-7b-beta',
+  reasoning: process.env.HUGGINGFACE_REASONING_MODEL || 'mistralai/Mistral-7B-Instruct-v0.2',
 } as const;
 
 function getApiKey() {
@@ -64,6 +82,21 @@ function getOpenRouterKey() {
 
 function getOpenAIKey() {
   const key = process.env.OPENAI_API_KEY?.trim();
+  return key || '';
+}
+
+function getGroqKey() {
+  const key = process.env.GROQ_API_KEY?.trim();
+  return key || '';
+}
+
+function getTogetherKey() {
+  const key = process.env.TOGETHER_API_KEY?.trim();
+  return key || '';
+}
+
+function getHuggingFaceKey() {
+  const key = process.env.HUGGINGFACE_API_KEY?.trim();
   return key || '';
 }
 
@@ -176,6 +209,158 @@ async function openAIGenerate(params: {
   throw new Error('OpenAI 응답 텍스트가 비어 있습니다.');
 }
 
+async function groqGenerate(params: {
+  model: string;
+  prompt: string;
+  temperature?: number;
+}) {
+  const apiKey = getGroqKey();
+  if (!apiKey) {
+    throw new Error('GROQ_API_KEY가 비어 있습니다.');
+  }
+
+  const response = await fetch(GROQ_API_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: params.model,
+      temperature: params.temperature ?? 0.2,
+      messages: [{ role: 'user', content: params.prompt }],
+    }),
+  });
+
+  const raw = await response.text();
+  let parsed: any = null;
+  try {
+    parsed = raw ? JSON.parse(raw) : null;
+  } catch {
+    parsed = null;
+  }
+
+  if (!response.ok) {
+    const message = parsed?.error?.message || raw || `Groq API 오류 (status ${response.status})`;
+    const error = new Error(message) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+
+  const content = parsed?.choices?.[0]?.message?.content;
+  if (typeof content === 'string' && content.trim()) return content.trim();
+  throw new Error('Groq 응답 텍스트가 비어 있습니다.');
+}
+
+async function togetherGenerate(params: {
+  model: string;
+  prompt: string;
+  temperature?: number;
+}) {
+  const apiKey = getTogetherKey();
+  if (!apiKey) {
+    throw new Error('TOGETHER_API_KEY가 비어 있습니다.');
+  }
+
+  const response = await fetch(TOGETHER_API_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: params.model,
+      temperature: params.temperature ?? 0.2,
+      messages: [{ role: 'user', content: params.prompt }],
+    }),
+  });
+
+  const raw = await response.text();
+  let parsed: any = null;
+  try {
+    parsed = raw ? JSON.parse(raw) : null;
+  } catch {
+    parsed = null;
+  }
+
+  if (!response.ok) {
+    const message = parsed?.error?.message || raw || `Together API 오류 (status ${response.status})`;
+    const error = new Error(message) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+
+  const content = parsed?.choices?.[0]?.message?.content;
+  if (typeof content === 'string' && content.trim()) return content.trim();
+  throw new Error('Together 응답 텍스트가 비어 있습니다.');
+}
+
+async function huggingFaceGenerate(params: {
+  model: string;
+  prompt: string;
+  temperature?: number;
+}) {
+  const apiKey = getHuggingFaceKey();
+  if (!apiKey) {
+    throw new Error('HUGGINGFACE_API_KEY가 비어 있습니다.');
+  }
+
+  const response = await fetch(`${HUGGINGFACE_API_URL}/${params.model}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      inputs: params.prompt,
+      parameters: {
+        max_new_tokens: 700,
+        temperature: params.temperature ?? 0.2,
+        return_full_text: false,
+      },
+    }),
+  });
+
+  const raw = await response.text();
+  let parsed: any = null;
+  try {
+    parsed = raw ? JSON.parse(raw) : null;
+  } catch {
+    parsed = null;
+  }
+
+  if (!response.ok) {
+    const message = parsed?.error || raw || `Hugging Face API 오류 (status ${response.status})`;
+    const error = new Error(String(message)) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+
+  const text =
+    (Array.isArray(parsed) && typeof parsed[0]?.generated_text === 'string' && parsed[0].generated_text) ||
+    (typeof parsed?.generated_text === 'string' && parsed.generated_text) ||
+    '';
+  if (text.trim()) return text.trim();
+  throw new Error('Hugging Face 응답 텍스트가 비어 있습니다.');
+}
+
+function parseJsonLenient<T>(raw: string): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced?.[1]) {
+      return JSON.parse(fenced[1]) as T;
+    }
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      return JSON.parse(raw.slice(start, end + 1)) as T;
+    }
+    throw new Error(`JSON 파싱 실패: ${raw.slice(0, 180)}`);
+  }
+}
+
 async function geminiGenerate(params: {
   model: string;
   parts: GeminiPart[];
@@ -253,7 +438,7 @@ ${JSON.stringify(params.schema)}
           prompt: fallbackPrompt,
           temperature: 0.1,
         });
-        return JSON.parse(text) as T;
+        return parseJsonLenient<T>(text);
       } catch (fallbackError) {
         fallbackErrors.push(
           fallbackError instanceof Error
@@ -270,12 +455,63 @@ ${JSON.stringify(params.schema)}
           prompt: fallbackPrompt,
           temperature: 0.1,
         });
-        return JSON.parse(text) as T;
+        return parseJsonLenient<T>(text);
       } catch (fallbackError) {
         fallbackErrors.push(
           fallbackError instanceof Error
             ? fallbackError
             : new Error('OpenRouter 폴백 실패'),
+        );
+      }
+    }
+
+    if (getGroqKey()) {
+      try {
+        const text = await groqGenerate({
+          model: GROQ_MODELS.reasoning,
+          prompt: fallbackPrompt,
+          temperature: 0.1,
+        });
+        return parseJsonLenient<T>(text);
+      } catch (fallbackError) {
+        fallbackErrors.push(
+          fallbackError instanceof Error
+            ? fallbackError
+            : new Error('Groq 폴백 실패'),
+        );
+      }
+    }
+
+    if (getTogetherKey()) {
+      try {
+        const text = await togetherGenerate({
+          model: TOGETHER_MODELS.reasoning,
+          prompt: fallbackPrompt,
+          temperature: 0.1,
+        });
+        return parseJsonLenient<T>(text);
+      } catch (fallbackError) {
+        fallbackErrors.push(
+          fallbackError instanceof Error
+            ? fallbackError
+            : new Error('Together 폴백 실패'),
+        );
+      }
+    }
+
+    if (getHuggingFaceKey()) {
+      try {
+        const text = await huggingFaceGenerate({
+          model: HUGGINGFACE_MODELS.reasoning,
+          prompt: fallbackPrompt,
+          temperature: 0.1,
+        });
+        return parseJsonLenient<T>(text);
+      } catch (fallbackError) {
+        fallbackErrors.push(
+          fallbackError instanceof Error
+            ? fallbackError
+            : new Error('HuggingFace 폴백 실패'),
         );
       }
     }
@@ -345,6 +581,54 @@ export async function generateGeminiText(params: {
       }
     }
 
+    if (getGroqKey()) {
+      try {
+        return await groqGenerate({
+          model: GROQ_MODELS.text,
+          prompt: mergedPrompt,
+          temperature: params.temperature ?? 0.2,
+        });
+      } catch (fallbackError) {
+        fallbackErrors.push(
+          fallbackError instanceof Error
+            ? fallbackError
+            : new Error('Groq 폴백 실패'),
+        );
+      }
+    }
+
+    if (getTogetherKey()) {
+      try {
+        return await togetherGenerate({
+          model: TOGETHER_MODELS.text,
+          prompt: mergedPrompt,
+          temperature: params.temperature ?? 0.2,
+        });
+      } catch (fallbackError) {
+        fallbackErrors.push(
+          fallbackError instanceof Error
+            ? fallbackError
+            : new Error('Together 폴백 실패'),
+        );
+      }
+    }
+
+    if (getHuggingFaceKey()) {
+      try {
+        return await huggingFaceGenerate({
+          model: HUGGINGFACE_MODELS.text,
+          prompt: mergedPrompt,
+          temperature: params.temperature ?? 0.2,
+        });
+      } catch (fallbackError) {
+        fallbackErrors.push(
+          fallbackError instanceof Error
+            ? fallbackError
+            : new Error('HuggingFace 폴백 실패'),
+        );
+      }
+    }
+
     if (fallbackErrors.length > 0) {
       throw fallbackErrors[fallbackErrors.length - 1];
     }
@@ -362,10 +646,10 @@ export function toUserFacingGeminiError(error: unknown) {
     : '';
 
   if (status === 429 || /quota|billing|rate limit|RESOURCE_EXHAUSTED/i.test(message)) {
-    return 'AI API 한도를 초과했습니다. Gemini/OpenAI/OpenRouter 키와 결제 상태를 확인해 주세요.';
+    return 'AI API 한도를 초과했습니다. Gemini/OpenAI/OpenRouter/Groq/Together/HuggingFace 키와 결제 상태를 확인해 주세요.';
   }
   if (status === 401 || status === 403 || /API key not valid|permission|invalid_api_key|Incorrect API key/i.test(message)) {
-    return 'AI API 키 또는 권한 설정을 확인해 주세요. (.env의 GEMINI_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY)';
+    return 'AI API 키 또는 권한 설정을 확인해 주세요. (.env의 GEMINI_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY / GROQ_API_KEY / TOGETHER_API_KEY / HUGGINGFACE_API_KEY)';
   }
   if (status === 400) {
     return 'AI 요청 형식이 올바르지 않습니다. 입력 데이터와 모델 설정을 확인해 주세요.';
