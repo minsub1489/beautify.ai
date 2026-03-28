@@ -81,6 +81,12 @@ main { max-width: 1440px; margin: 0 auto; padding: 20px; }
   color: var(--text);
   border: 1px solid rgba(236, 72, 153, 0.18);
 }
+.button.ghost {
+  background: rgba(255,255,255,0.68);
+  color: #7a4f67;
+  border: 1px solid rgba(236, 72, 153, 0.12);
+  box-shadow: none;
+}
 .button.danger { background: linear-gradient(135deg, #fb7185 0%, #f43f5e 100%); color: #fff; }
 .button:disabled { opacity: .5; cursor: not-allowed; }
 .badge {
@@ -241,6 +247,30 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
+}
+.previewEditPrompt {
+  border: 1px solid rgba(236,72,153,0.18);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.92) 0%, rgba(255,241,247,0.98) 100%);
+  box-shadow: 0 14px 32px rgba(236, 72, 153, 0.1);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.previewEditPromptTitle {
+  font-size: 15px;
+  font-weight: 800;
+  color: #9d174d;
+}
+.previewEditPromptBody {
+  color: #4b5563;
+  line-height: 1.6;
+}
+.previewEditPromptActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 .previewEditGrid {
   display: grid;
@@ -1228,6 +1258,26 @@ pre {
 [data-theme='dark'] .previewEditWrap {
   background: linear-gradient(180deg, rgba(16, 24, 37, 0.96) 0%, rgba(11, 17, 28, 0.98) 100%);
   border-color: rgba(95, 126, 170, 0.2);
+}
+
+[data-theme='dark'] .button.ghost {
+  background: rgba(15, 23, 35, 0.72);
+  color: #d6dce8;
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+[data-theme='dark'] .previewEditPrompt {
+  background: linear-gradient(135deg, rgba(20, 29, 43, 0.96) 0%, rgba(13, 20, 31, 0.98) 100%);
+  border-color: rgba(244, 114, 182, 0.24);
+  box-shadow: 0 16px 34px rgba(2, 6, 23, 0.26);
+}
+
+[data-theme='dark'] .previewEditPromptTitle {
+  color: #f9a8d4;
+}
+
+[data-theme='dark'] .previewEditPromptBody {
+  color: #c9d5e6;
 }
 
 [data-theme='dark'] .previewEditCard {

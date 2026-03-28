@@ -248,6 +248,7 @@ export function WorkspaceShell({
 }) {
   const router = useRouter();
   const attachmentRef = useRef<HTMLInputElement>(null);
+  const mergePdfRef = useRef<HTMLInputElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const previewEditWrapRef = useRef<HTMLDivElement>(null);
   const pdfEditAutoScrollFrameRef = useRef<number | null>(null);
@@ -299,6 +300,9 @@ export function WorkspaceShell({
   const [pdfPageStatus, setPdfPageStatus] = useState('');
   const [draggingPdfPageId, setDraggingPdfPageId] = useState('');
   const [dragOverPdfInsertIndex, setDragOverPdfInsertIndex] = useState<number | null>(null);
+  const [pendingMergePdf, setPendingMergePdf] = useState<File | null>(null);
+  const [pdfMergeLoading, setPdfMergeLoading] = useState(false);
+  const [pdfMergeStatus, setPdfMergeStatus] = useState('');
 
   const quickPrompts = useMemo(
     () => [
@@ -382,6 +386,7 @@ export function WorkspaceShell({
     if (!pdfPageItems.length) return '편집할 페이지가 없습니다.';
     return `총 ${currentPdfPageCount}페이지 · 카드를 드래그해서 순서를 바꾸고 X로 제거하세요.`;
   }, [currentPdfPageCount, pdfPageItems.length, pdfPageLoading]);
+  const pdfEditBusy = pdfPageLoading || pdfPageSaving || pdfMergeLoading;
 
   const SIDEBAR_MIN = 220;
   const SIDEBAR_MAX = 520;
@@ -475,6 +480,9 @@ export function WorkspaceShell({
     setPdfPageStatus('');
     setDraggingPdfPageId('');
     setDragOverPdfInsertIndex(null);
+    setPendingMergePdf(null);
+    setPdfMergeLoading(false);
+    setPdfMergeStatus('');
     pdfEditAutoScrollSpeedRef.current = 0;
     if (pdfEditAutoScrollFrameRef.current !== null) {
       cancelAnimationFrame(pdfEditAutoScrollFrameRef.current);
@@ -489,6 +497,8 @@ export function WorkspaceShell({
       cancelAnimationFrame(pdfEditAutoScrollFrameRef.current);
       pdfEditAutoScrollFrameRef.current = null;
     }
+    setPendingMergePdf(null);
+    setPdfMergeStatus('');
   }, [pdfEditMode]);
 
   useEffect(() => {
@@ -1048,6 +1058,59 @@ export function WorkspaceShell({
     return target instanceof HTMLElement && Boolean(target.closest('button'));
   }
 
+  function handleMergePdfSelect(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      setPendingMergePdf(null);
+      setPdfMergeStatus('PDF 파일만 추가할 수 있습니다.');
+      return;
+    }
+
+    setPendingMergePdf(file);
+    setPdfMergeStatus(`추가 PDF "${file.name}"를 현재 PDF 앞에 둘지, 뒤에 둘지 선택해 주세요.`);
+  }
+
+  function cancelPendingMergePdf() {
+    setPendingMergePdf(null);
+    setPdfMergeStatus('');
+  }
+
+  async function mergePdfIntoCurrent(position: 'before' | 'after') {
+    if (!selectedProject?.id || !pendingMergePdf || pdfMergeLoading) return;
+
+    setPdfMergeLoading(true);
+    setPdfMergeStatus(position === 'before' ? '추가 PDF를 현재 PDF 앞에 합치는 중...' : '추가 PDF를 현재 PDF 뒤에 합치는 중...');
+
+    try {
+      const formData = new FormData();
+      formData.set('pdf', pendingMergePdf);
+      formData.set('position', position);
+
+      const response = await fetch(`/api/projects/${selectedProject.id}/pdf-merge`, {
+        method: 'POST',
+        body: formData,
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setPdfMergeStatus(typeof payload?.error === 'string' ? payload.error : '추가 PDF를 합치지 못했습니다.');
+        return;
+      }
+
+      setPendingMergePdf(null);
+      setPdfMergeStatus('추가 PDF를 반영했습니다. 새 PDF 기준으로 편집 페이지를 다시 불러옵니다.');
+      router.refresh();
+    } catch {
+      setPdfMergeStatus('추가 PDF를 합치는 중 네트워크 오류가 발생했습니다.');
+    } finally {
+      setPdfMergeLoading(false);
+    }
+  }
+
   function resetPdfPageEdits() {
     setPdfPageItems(pdfPageInitialOrder.map((page) => createPageEditorItem(page)));
     resetPdfDragState();
@@ -1479,8 +1542,17 @@ export function WorkspaceShell({
                       <button
                         type="button"
                         className="button secondary"
+                        onClick={() => mergePdfRef.current?.click()}
+                        disabled={pdfEditBusy}
+                      >
+                        <Plus size={16} />
+                        PDF 추가
+                      </button>
+                      <button
+                        type="button"
+                        className="button secondary"
                         onClick={resetPdfPageEdits}
-                        disabled={pdfPageLoading || pdfPageSaving || !pdfPageItems.length || !pdfPageDirty}
+                        disabled={pdfEditBusy || !pdfPageItems.length || !pdfPageDirty}
                       >
                         초기화
                       </button>
@@ -1488,13 +1560,56 @@ export function WorkspaceShell({
                         type="button"
                         className="button"
                         onClick={() => void applyPdfPageEdits()}
-                        disabled={pdfPageLoading || pdfPageSaving || !pdfPageItems.length || !pdfPageDirty}
+                        disabled={pdfEditBusy || !pdfPageItems.length || !pdfPageDirty}
                       >
                         {pdfPageSaving ? '적용 중...' : '변경 적용'}
                       </button>
                     </div>
                   </div>
+                  <input
+                    ref={mergePdfRef}
+                    className="hiddenInput"
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    onChange={handleMergePdfSelect}
+                  />
+                  {pendingMergePdf ? (
+                    <div className="previewEditPrompt">
+                      <div className="previewEditPromptTitle">추가 PDF 위치 선택</div>
+                      <div className="previewEditPromptBody">
+                        <strong>{pendingMergePdf.name}</strong>을(를) 현재 PDF의 앞에 넣을지, 뒤에 넣을지 선택해 주세요.
+                        필기, 퀴즈, 번역 결과는 새 PDF 기준으로 다시 정리됩니다.
+                      </div>
+                      <div className="previewEditPromptActions">
+                        <button
+                          type="button"
+                          className="button secondary"
+                          onClick={() => void mergePdfIntoCurrent('before')}
+                          disabled={pdfMergeLoading}
+                        >
+                          현재 PDF 앞에 추가
+                        </button>
+                        <button
+                          type="button"
+                          className="button"
+                          onClick={() => void mergePdfIntoCurrent('after')}
+                          disabled={pdfMergeLoading}
+                        >
+                          현재 PDF 뒤에 추가
+                        </button>
+                        <button
+                          type="button"
+                          className="button ghost"
+                          onClick={cancelPendingMergePdf}
+                          disabled={pdfMergeLoading}
+                        >
+                          취소
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   {pdfPageStatus ? <div className="muted">{pdfPageStatus}</div> : null}
+                  {pdfMergeStatus ? <div className="muted">{pdfMergeStatus}</div> : null}
                   {pdfPageLoading ? (
                     <div className="pageEditorEmpty previewEditEmpty">PDF 페이지를 불러오는 중...</div>
                   ) : pdfPageItems.length ? (
@@ -1520,7 +1635,7 @@ export function WorkspaceShell({
                           {dragOverPdfInsertIndex === index ? <div className="previewEditInsertMarker" aria-hidden="true" /> : null}
                           <div
                             className={`previewEditCard ${draggingPdfPageId === item.id ? 'dragging' : ''}`}
-                            draggable={!pdfPageSaving}
+                            draggable={!pdfEditBusy}
                             onDragStart={(event) => {
                               if (shouldIgnorePdfCardDrag(event.target)) {
                                 event.preventDefault();
@@ -1548,7 +1663,7 @@ export function WorkspaceShell({
                                 event.stopPropagation();
                                 deletePdfPageById(item.id);
                               }}
-                              disabled={pdfPageSaving || pdfPageItems.length <= 1}
+                              disabled={pdfEditBusy || pdfPageItems.length <= 1}
                               draggable={false}
                               aria-label={`${index + 1}페이지 제거`}
                               title="페이지 제거"
