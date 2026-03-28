@@ -40,10 +40,6 @@ pre { white-space: pre-wrap; word-break: break-word; background: #fafbff; paddin
 .clipButton { background: #f7f9ff; border-color: #c9d6ff; color: #2747ab; }
 .attachmentList { display: flex; flex-wrap: wrap; gap: 8px; }
 .attachmentChip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; background: #fafcff; font-size: 13px; }
-.mathTool { border-radius: 18px; padding: 14px; background: #fbfcff; border: 1px solid #dfe7ff; }
-.mathPreview { border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-height: 62px; background: #fff; overflow-x: auto; }
-.graphCard { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: #fff; display: flex; flex-direction: column; gap: 8px; }
-.graphTitle { font-weight: 700; color: #1f2f63; }
 .workspaceStudio { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
 .previewCard { min-height: 620px; position: relative; }
 .previewHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

@@ -4,8 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import katex from 'katex';
-import { ChevronLeft, ChevronRight, ExternalLink, Languages, Paperclip, Pencil, Plus, Trash2, UploadCloud } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Languages, Paperclip, Pencil, Plus, Trash2, UploadCloud } from 'lucide-react';
 import { AuthControls } from './auth-controls';
 
 type ProjectItem = {
@@ -67,12 +66,6 @@ type WrongAnswerNote = {
   userAnswer: string;
   correctAnswer: string;
   hint?: string;
-};
-
-type GraphVisual = {
-  title: string;
-  caption: string;
-  series: { label: string; points: { x: number; y: number; label?: string }[] }[];
 };
 
 function sanitizeText(value: unknown, fallback = '') {
@@ -200,45 +193,6 @@ function isQuizAnswerCorrect(item: QuizItem, userAnswer: string) {
   return normalizedCorrect.includes(normalizedUser) || normalizedUser.includes(normalizedCorrect);
 }
 
-function toTextArray(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((v): v is string => typeof v === 'string').map((v) => v.trim()).filter(Boolean);
-}
-
-function parseGraphVisuals(raw: unknown): GraphVisual[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((item): GraphVisual | null => {
-      if (!item || typeof item !== 'object') return null;
-      const record = item as Record<string, unknown>;
-      if (record.kind !== 'graph') return null;
-      const graph = record.graph as { series?: { label?: string; points?: { x?: number; y?: number; label?: string }[] }[] } | undefined;
-      const series = Array.isArray(graph?.series)
-        ? graph.series
-            .map((s) => ({
-              label: typeof s.label === 'string' ? s.label : 'Series',
-              points: Array.isArray(s.points)
-                ? s.points
-                    .filter((p) => typeof p?.x === 'number' && typeof p?.y === 'number')
-                    .map((p) => ({ x: Number(p.x), y: Number(p.y), label: typeof p.label === 'string' ? p.label : undefined }))
-                : [],
-            }))
-            .filter((s) => s.points.length > 0)
-        : [];
-      if (!series.length) return null;
-      return {
-        title: typeof record.title === 'string' ? record.title : 'AI 그래프',
-        caption: typeof record.caption === 'string' ? record.caption : '',
-        series,
-      };
-    })
-    .filter((v): v is GraphVisual => Boolean(v));
-}
-
-function isMathLike(text: string) {
-  return /[=+\-*/^_\\{}()]/.test(text) || /\d/.test(text);
-}
-
 export function WorkspaceShell({
   projects,
   selectedProject,
@@ -307,8 +261,6 @@ export function WorkspaceShell({
 
   const quizItems = useMemo(() => parseQuizItems(selectedProject?.lastRun?.questionsJson), [selectedProject?.lastRun?.questionsJson]);
   const activeQuizItems = useMemo(() => (retryQuizMode ? retryQuizItems : quizItems), [quizItems, retryQuizItems, retryQuizMode]);
-  const examFocusItems = useMemo(() => toTextArray(selectedProject?.lastRun?.examFocusJson), [selectedProject?.lastRun?.examFocusJson]);
-  const graphVisuals = useMemo(() => parseGraphVisuals(selectedProject?.lastRun?.visualsJson), [selectedProject?.lastRun?.visualsJson]);
   const hasPdfAsset = useMemo(() => Boolean(selectedProject?.assets?.some((asset) => asset.kind === 'pdf')), [selectedProject?.assets]);
   const latestPdfAsset = useMemo(() => {
     if (!selectedProject?.assets?.length) return null;
@@ -349,18 +301,6 @@ export function WorkspaceShell({
     }
     return basePreviewPdfUrl;
   }, [basePreviewPdfUrl, translatedAssetId, translationMode]);
-
-  const renderedMathFocus = useMemo(
-    () =>
-      examFocusItems
-        .filter((line) => isMathLike(line))
-        .slice(0, 4)
-        .map((line) => ({
-          raw: line,
-          html: katex.renderToString(line, { throwOnError: false, displayMode: true }),
-        })),
-    [examFocusItems],
-  );
 
   const SIDEBAR_MIN = 220;
   const SIDEBAR_MAX = 520;
@@ -1167,38 +1107,6 @@ export function WorkspaceShell({
                   ))}
                 </div>
 
-                {(renderedMathFocus.length || graphVisuals.length) ? (
-                  <div className="mathTool card">
-                    <div className="sectionTitle">AI 수식/그래프 보조</div>
-                    {renderedMathFocus.length ? (
-                      <div className="stack">
-                        {renderedMathFocus.map((item, idx) => (
-                          <div key={`${item.raw}-${idx}`} className="mathPreview" dangerouslySetInnerHTML={{ __html: item.html }} />
-                        ))}
-                      </div>
-                    ) : null}
-                    {graphVisuals.length ? (
-                      <div className="stack">
-                        {graphVisuals.slice(0, 2).map((graph, idx) => (
-                          <div key={`${graph.title}-${idx}`} className="graphCard">
-                            <div className="graphTitle">{graph.title}</div>
-                            {graph.caption ? <div className="muted">{graph.caption}</div> : null}
-                            <div className="muted">
-                              {graph.series[0]?.points
-                                .slice(0, 5)
-                                .map((p) => `(${p.x}, ${p.y})`)
-                                .join(', ')}
-                            </div>
-                            <a className="button secondary" href="https://www.desmos.com/calculator?lang=ko" target="_blank" rel="noreferrer">
-                              <ExternalLink size={16} />
-                              Desmos에서 보기
-                            </a>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
               </>
             ) : (
               <div className="quizTabPanel">
