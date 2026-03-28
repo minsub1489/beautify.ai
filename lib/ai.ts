@@ -283,3 +283,61 @@ reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint
     throw new Error(toUserFacingGeminiError(error));
   }
 }
+
+export async function regeneratePageNote(payload: {
+  subject?: string;
+  lectureTitle: string;
+  pageNumber: number;
+  pageText: string;
+  currentNote?: string;
+  fullSummary?: string;
+  examFocus?: string[];
+  transcriptText?: string;
+  notionText?: string;
+  customNotes?: string;
+}) {
+  const pageTextMax = toInt(process.env.AI_GENERATE_PDF_MAX_CHARS, LOW_TOKEN_MODE ? 2200 : 5000);
+  const supportingTextMax = toInt(process.env.AI_GENERATE_NOTES_MAX_CHARS, LOW_TOKEN_MODE ? 800 : 2200);
+
+  try {
+    const result = await generateGeminiJson<{ notes: string }>({
+      model: LOW_TOKEN_MODE ? GEMINI_MODELS.text : GEMINI_MODELS.reasoning,
+      prompt: `
+너는 PDF 페이지별 필기를 다시 써주는 강의자료 필기 AI다.
+목표는 ${payload.pageNumber}페이지에 들어갈 필기를 더 정확하고 시험 친화적으로 다시 만드는 것이다.
+
+반드시 지켜라:
+1) 출력은 JSON만.
+2) notes는 반드시 한국어.
+3) notes는 ${LOW_TOKEN_MODE ? '1~3줄' : '2~5줄'}로 간결하게 작성.
+4) 반드시 아래 "페이지 본문"을 가장 우선해서 분석해라.
+5) 해당 페이지에서 직접 확인되지 않는 내용을 추측해서 넣지 마라.
+6) 정의, 원리, 과정, 비교, 시험 포인트 중심으로 다시 정리해라.
+7) 현재 필기 초안이 있더라도 그대로 베끼지 말고 더 자연스럽고 이해하기 쉽게 다시 써라.
+
+입력:
+- 과목: ${payload.subject ?? '미지정'}
+- 강의 제목: ${payload.lectureTitle}
+- 페이지 번호: ${payload.pageNumber}
+- 페이지 본문: ${compactContext(payload.pageText, pageTextMax)}
+- 현재 필기 초안: ${compactContext(payload.currentNote ?? '', supportingTextMax)}
+- 전체 요약: ${compactContext(payload.fullSummary ?? '', supportingTextMax)}
+- 시험 포인트: ${compactContext((payload.examFocus ?? []).join('\n'), supportingTextMax)}
+- 음성 전사: ${compactContext(payload.transcriptText ?? '', supportingTextMax)}
+- 노션 메모: ${compactContext(payload.notionText ?? '', supportingTextMax)}
+- 사용자 메모: ${compactContext(payload.customNotes ?? '', supportingTextMax)}
+`,
+      schema: {
+        type: 'object',
+        properties: {
+          notes: { type: 'string' },
+        },
+        required: ['notes'],
+      },
+    });
+
+    return result.notes.trim();
+  } catch (error) {
+    throw new Error(toUserFacingGeminiError(error));
+  }
+}

@@ -133,6 +133,28 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 .clipButton { background: linear-gradient(135deg, rgba(255,255,255,0.92) 0%, rgba(239,245,255,0.94) 100%); border-color: rgba(120, 146, 255, 0.26); color: #5b37ba; }
 .attachmentList { display: flex; flex-wrap: wrap; gap: 8px; }
 .attachmentChip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(146,123,255,0.18); border-radius: 999px; padding: 7px 12px; background: rgba(255,255,255,0.78); font-size: 13px; }
+.pageNotePanel {
+  border: 1px solid rgba(146,123,255,0.16);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.84) 0%, rgba(247,242,255,0.95) 100%);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pageNoteList { display: flex; flex-direction: column; gap: 10px; }
+.pageNoteItem {
+  border: 1px solid rgba(146,123,255,0.14);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.84);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pageNoteTop { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.pageNoteTitle { font-weight: 800; color: #4f2ca8; }
+.pageNoteBody { white-space: pre-wrap; line-height: 1.65; color: #2f2742; }
 .workspaceStudio { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
 .previewCard { min-height: 620px; position: relative; }
 .previewHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

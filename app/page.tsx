@@ -53,7 +53,9 @@ export default async function HomePage({
                   text: message.text,
                   createdAt: message.createdAt.toISOString(),
                 })),
-                assets: selected.assets.map((asset) => ({
+                assets: [...selected.assets]
+                  .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+                  .map((asset) => ({
                   id: asset.id,
                   kind: asset.kind,
                   originalName: asset.originalName,
@@ -65,6 +67,7 @@ export default async function HomePage({
                       summary: selected.runs[0].summary,
                       outputUrl: selected.runs[0].outputAsset?.publicUrl,
                       examFocusJson: selected.runs[0].examFocusJson,
+                      notesByPageJson: selected.runs[0].notesByPageJson,
                       visualsJson: selected.runs[0].visualsJson,
                       questionsJson: selected.runs[0].questionsJson,
                       createdAt: selected.runs[0].createdAt.toISOString(),

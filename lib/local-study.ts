@@ -154,3 +154,18 @@ export function generateLocalStudyPack(input: {
     reviewQuestions: questions,
   };
 }
+
+export function regenerateLocalPageNote(input: {
+  pageText: string;
+  currentNote?: string;
+}) {
+  const candidates = topSentences(`${input.pageText}\n${input.currentNote ?? ''}`, 4);
+  if (!candidates.length) {
+    return cleanText(input.currentNote || '이 페이지의 핵심 내용을 다시 정리했습니다.');
+  }
+
+  return candidates
+    .slice(0, 3)
+    .map((line, idx) => `${idx + 1}. ${cleanText(line)}`)
+    .join('\n');
+}

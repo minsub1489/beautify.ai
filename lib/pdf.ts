@@ -7,6 +7,35 @@ export async function extractPdfText(bytes: Buffer) {
   return parsed.text || '';
 }
 
+export async function extractPdfTextsByPage(bytes: Buffer) {
+  const pageTexts: string[] = [];
+  await pdf(bytes, {
+    pagerender: async (pageData: any) => {
+      const textContent = await pageData.getTextContent({
+        normalizeWhitespace: false,
+        disableCombineTextItems: false,
+      });
+
+      let lastY: number | undefined;
+      let text = '';
+      for (const item of textContent.items as Array<{ str?: string; transform?: number[] }>) {
+        const value = typeof item.str === 'string' ? item.str : '';
+        const y = Array.isArray(item.transform) ? item.transform[5] : undefined;
+        if (lastY === y || typeof lastY === 'undefined') {
+          text += value;
+        } else {
+          text += `\n${value}`;
+        }
+        lastY = y;
+      }
+
+      pageTexts.push(text.trim());
+      return text;
+    },
+  });
+  return pageTexts;
+}
+
 export async function annotatePdfWithNotes(params: {
   originalPdf: Buffer;
   notesByPage: { page: number; notes: string }[];
