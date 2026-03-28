@@ -92,6 +92,7 @@ export async function generateAnnotatedNotes(payload: {
   subject?: string;
   lectureTitle: string;
   pdfText: string;
+  pdfPages?: { page: number; text: string }[];
   transcriptText?: string;
   notionText?: string;
   customNotes?: string;
@@ -100,15 +101,22 @@ export async function generateAnnotatedNotes(payload: {
   const generateTranscriptMax = toInt(process.env.AI_GENERATE_TRANSCRIPT_MAX_CHARS, LOW_TOKEN_MODE ? 1800 : 6000);
   const generateNotionMax = toInt(process.env.AI_GENERATE_NOTION_MAX_CHARS, LOW_TOKEN_MODE ? 1400 : 5000);
   const generateNotesMax = toInt(process.env.AI_GENERATE_NOTES_MAX_CHARS, LOW_TOKEN_MODE ? 1400 : 5000);
+  const pageOutlineMaxPages = toInt(process.env.AI_GENERATE_PAGE_CONTEXT_COUNT, LOW_TOKEN_MODE ? 8 : 12);
+  const pageOutlineTextMax = toInt(process.env.AI_GENERATE_PAGE_CONTEXT_MAX_CHARS, LOW_TOKEN_MODE ? 220 : 520);
 
   const compactedPdf = compactContext(payload.pdfText, generatePdfMax);
   const compactedTranscript = compactContext(payload.transcriptText ?? '', generateTranscriptMax);
   const compactedNotion = compactContext(payload.notionText ?? '', generateNotionMax);
   const compactedCustomNotes = compactContext(payload.customNotes ?? '', generateNotesMax);
+  const compactedPageOutline = (payload.pdfPages ?? [])
+    .slice(0, pageOutlineMaxPages)
+    .map((page) => `- ${page.page}페이지: ${compactContext(page.text, pageOutlineTextMax)}`)
+    .filter(Boolean)
+    .join('\n');
 
   const prompt = `
 너는 대학생/고등학생용 강의자료 필기 AI다.
-목표는 원본 PDF 옆에 들어갈 짧고 정확한 필기와, 시험 대비용 시각자료를 만드는 것이다.
+목표는 원본 PDF 페이지 위에 직접 삽입되는 짧고 정확한 필기와, 시험 대비용 시각자료를 만드는 것이다.
 입력 자료는 비용 최적화를 위해 압축되어 있으니, 핵심 문장 위주로 논리적으로 복원해 정리해라.
 
 과목 자동화 규칙:
@@ -121,28 +129,34 @@ export async function generateAnnotatedNotes(payload: {
 3) notesByPage는 페이지별로 ${LOW_TOKEN_MODE ? '1~3줄' : '2~5줄'} 길이의 한국어 필기.
 4) examFocus는 시험에 나올 가능성이 높은 포인트.
 5) visuals는 최대 ${LOW_TOKEN_MODE ? '1개' : '3개'}.
-6) 수학/통계/선형대수/미적분이면 graph를 우선 고려.
-7) 역사면 timeline을 우선 고려.
-8) 코딩/딥러닝/AI/CS 계열이면 flowchart나 table을 최소 1개 이상 적극 사용.
-9) 과학/경제/사회면 table 또는 flowchart를 적극 사용.
-10) 교수자 강조점은 transcript/notion/customNotes를 우선 반영.
-11) PDF 내용이 부족하면 추측하지 말고 일반화된 안전한 수준으로만 정리.
-12) 코딩/AI 계열이면 개념 정의뿐 아니라 "입력→처리→출력", 함수 역할, 모델 흐름, 학습 포인트, 자주 틀리는 부분을 강조하라.
-13) 딥러닝/AI 계열이면 수식이 있더라도 직관, 손실함수 의미, 역전파/학습 흐름, 모델 비교를 학생이 이해하기 쉽게 바꿔라.
-14) 사용자가 메모를 채팅처럼 여러 개 넣었으면 각 메모를 모두 반영하라.
-15) reviewQuestions는 ${LOW_TOKEN_MODE ? '4개' : '4~5개'}만 만들고, PDF에서 가장 중요한 부분만 추려 간단하고 선명하게 출제해라.
-16) reviewQuestions의 type은 short/ox/mcq만 사용하고, 세 유형이 고르게 섞이게 만들어라.
-17) short: answer는 1~2문장 핵심답. ox: answer는 반드시 O 또는 X 중 하나. mcq: options는 반드시 4개, correctOptionIndex는 0~3.
-18) 모든 quiz question/answer/hint/options/source는 반드시 한국어로 작성해라.
-19) 각 문제마다 source에 PDF 본문에서 실제로 확인되는 출제 근거 문구(짧은 발췌)를 넣어라.
-20) source와 무관한 일반론/상식형 문제는 금지한다.
-21) PDF에서 중요도가 낮은 주변 설명은 문제화하지 말고, 정의/원리/과정/비교/결론처럼 시험에 바로 나올 핵심만 고른다.
-22) hint는 한 줄 힌트로 작성하고, 답을 그대로 반복하지 말아라.
+6) notesByPage.page와 visuals.page는 반드시 실제 PDF 페이지 번호(1부터 시작)를 사용한다.
+7) 가능하면 아래 "페이지 개요"를 최우선으로 참고해서 어느 페이지에 어떤 필기/시각자료를 넣을지 정한다.
+8) visuals는 새 페이지를 만드는 용도가 아니라, 원본 PDF 페이지 안에 삽입되는 카드형 필기 자료다.
+9) 수학/통계/선형대수/미적분이면 formula 또는 graph를 우선 고려한다.
+10) 역사면 timeline을 우선 고려한다.
+11) 코딩/딥러닝/AI/CS 계열이면 flowchart나 table을 최소 1개 이상 적극 사용한다.
+12) 과학/경제/사회면 table 또는 flowchart를 적극 사용한다.
+13) 교수자 강조점은 transcript/notion/customNotes를 우선 반영한다.
+14) PDF 내용이 부족하면 추측하지 말고 일반화된 안전한 수준으로만 정리한다.
+15) 코딩/AI 계열이면 개념 정의뿐 아니라 "입력→처리→출력", 함수 역할, 모델 흐름, 학습 포인트, 자주 틀리는 부분을 강조하라.
+16) 딥러닝/AI 계열이면 수식이 있더라도 직관, 손실함수 의미, 역전파/학습 흐름, 모델 비교를 학생이 이해하기 쉽게 바꿔라.
+17) 사용자가 메모를 채팅처럼 여러 개 넣었으면 각 메모를 모두 반영하라.
+18) reviewQuestions는 ${LOW_TOKEN_MODE ? '4개' : '4~5개'}만 만들고, PDF에서 가장 중요한 부분만 추려 간단하고 선명하게 출제해라.
+19) reviewQuestions의 type은 short/ox/mcq만 사용하고, 세 유형이 고르게 섞이게 만들어라.
+20) short: answer는 1~2문장 핵심답. ox: answer는 반드시 O 또는 X 중 하나. mcq: options는 반드시 4개, correctOptionIndex는 0~3.
+21) 모든 quiz question/answer/hint/options/source는 반드시 한국어로 작성해라.
+22) 각 문제마다 source에 PDF 본문에서 실제로 확인되는 출제 근거 문구(짧은 발췌)를 넣어라.
+23) source와 무관한 일반론/상식형 문제는 금지한다.
+24) PDF에서 중요도가 낮은 주변 설명은 문제화하지 말고, 정의/원리/과정/비교/결론처럼 시험에 바로 나올 핵심만 고른다.
+25) hint는 한 줄 힌트로 작성하고, 답을 그대로 반복하지 말아라.
+26) formula를 만들 때 expression은 가능한 한 짧고 읽기 쉬운 식/의사수식으로 적고, meaning/example은 학생이 이해하기 쉬운 한국어로 적는다.
 
 입력:
 - 과목: ${payload.subject ?? '미지정'}
 - 강의 제목: ${payload.lectureTitle}
 - PDF 본문: ${compactedPdf}
+- 페이지 개요:
+${compactedPageOutline || '- 페이지 개요 없음'}
 - 음성 전사: ${compactedTranscript}
 - 노션 메모: ${compactedNotion}
 - 사용자 메모: ${compactedCustomNotes}
@@ -152,13 +166,15 @@ summary: 전체 요약
 examFocus: string[]
 notesByPage: [{page:number, notes:string}]
 visuals: [
- {title, kind:'graph', caption, graph:{xLabel,yLabel,series:[{label,points:[{x:number,y:number,label?:string}]}]}}
+ {title, page:number, kind:'graph', caption, graph:{xLabel,yLabel,series:[{label,points:[{x:number,y:number,label?:string}]}]}}
  또는
- {title, kind:'timeline', caption, timeline:{events:[{year,label,detail?}]}}
+ {title, page:number, kind:'timeline', caption, timeline:{events:[{year,label,detail?}]}}
  또는
- {title, kind:'table', caption, table:{columns:string[], rows:string[][]}}
+ {title, page:number, kind:'table', caption, table:{columns:string[], rows:string[][]}}
  또는
- {title, kind:'flowchart', caption, flowchart:{nodes:[{id,label}], edges:[{from,to,label?}]}}
+ {title, page:number, kind:'flowchart', caption, flowchart:{nodes:[{id,label}], edges:[{from,to,label?}]}}
+ 또는
+ {title, page:number, kind:'formula', caption, formula:{expression:string, meaning?:string, example?:string}}
 ]
 reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint?:string, source:string, options?:string[], correctOptionIndex?:number}]
 `;
@@ -186,7 +202,8 @@ reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint
               type: 'object',
               properties: {
                 title: { type: 'string' },
-                kind: { type: 'string', enum: ['graph', 'timeline', 'table', 'flowchart'] },
+                page: { type: 'number' },
+                kind: { type: 'string', enum: ['graph', 'timeline', 'table', 'flowchart', 'formula'] },
                 caption: { type: 'string' },
                 graph: {
                   anyOf: [
@@ -247,9 +264,23 @@ reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint
                       }, required: ['nodes', 'edges']
                     }
                   ]
+                },
+                formula: {
+                  anyOf: [
+                    { type: 'null' },
+                    {
+                      type: 'object',
+                      properties: {
+                        expression: { type: 'string' },
+                        meaning: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                        example: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                      },
+                      required: ['expression', 'meaning', 'example'],
+                    }
+                  ]
                 }
               },
-              required: ['title', 'kind', 'caption', 'graph', 'timeline', 'table', 'flowchart']
+              required: ['title', 'page', 'kind', 'caption', 'graph', 'timeline', 'table', 'flowchart', 'formula']
             }
           },
           reviewQuestions: {

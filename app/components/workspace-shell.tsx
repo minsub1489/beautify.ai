@@ -1331,10 +1331,11 @@ export function WorkspaceShell({
                     name="noteText"
                     value={noteDraft}
                     onChange={(e) => setNoteDraft(e.target.value)}
-                    placeholder="예: 교수님이 역전파 유도 과정과 Transformer attention 계산을 중요하다고 했어. 표와 흐름도로 같이 정리해줘"
+                    placeholder="예: 교수님이 역전파 유도 과정과 Transformer attention 계산을 중요하다고 했어. 해당 페이지들에 수식 카드와 흐름도를 넣어서 새 필기 PDF로 만들어줘"
                     disabled={isGenerating}
                   />
                 </div>
+                <div className="muted">생성을 누르면 현재 PDF 페이지 위에 필기, 수식, 그래프, 년표 같은 보조 자료를 직접 넣은 새 필기 PDF를 만듭니다.</div>
 
                 <div className="composerActions">
                   <button
@@ -1385,8 +1386,8 @@ export function WorkspaceShell({
 
                 {pageNotes.length ? (
                   <div className="pageNotePanel">
-                    <div className="sectionTitle">페이지별 필기</div>
-                    <div className="muted">마음에 들지 않는 페이지는 해당 페이지만 다시 생성할 수 있습니다.</div>
+                    <div className="sectionTitle">PDF 위 필기 다시 생성</div>
+                    <div className="muted">마음에 들지 않는 페이지는 해당 페이지의 PDF 필기만 다시 만들어서 새 필기 PDF에 바로 반영합니다.</div>
                     <div className="pageNoteList">
                       {pageNotes.map((item) => (
                         <div key={item.page} className="pageNoteItem">
@@ -1401,7 +1402,7 @@ export function WorkspaceShell({
                               {regeneratingPage === item.page ? '다시 생성 중...' : '이 페이지 다시 생성'}
                             </button>
                           </div>
-                          <div className="pageNoteBody">{item.notes}</div>
+                          <div className="muted">현재 생성된 필기는 중앙 PDF 미리보기 안에 직접 삽입됩니다.</div>
                         </div>
                       ))}
                     </div>

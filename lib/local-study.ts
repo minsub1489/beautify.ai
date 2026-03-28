@@ -49,7 +49,25 @@ function inferSubject(pdfText: string, lectureTitle: string) {
   return '일반 학습';
 }
 
-function makeNotesByPage(pdfText: string) {
+function makeNotesByPage(pdfText: string, pdfPageTexts?: string[]) {
+  if (pdfPageTexts?.length) {
+    const pageNotes = pdfPageTexts
+      .map((pageText, index) => {
+        const lines = topSentences(pageText, 3);
+        if (!lines.length) return null;
+        return {
+          page: index + 1,
+          notes: lines
+            .slice(0, 3)
+            .map((line, lineIndex) => `${lineIndex + 1}. ${cleanText(line)}`)
+            .join('\n'),
+        };
+      })
+      .filter((item): item is { page: number; notes: string } => Boolean(item));
+
+    if (pageNotes.length) return pageNotes;
+  }
+
   const candidates = topSentences(pdfText, 24);
   const pages = Math.max(1, Math.min(8, Math.ceil(candidates.length / 3)));
   const out: { page: number; notes: string }[] = [];
@@ -119,6 +137,7 @@ function makeQuestions(examFocus: string[]) {
 export function generateLocalStudyPack(input: {
   lectureTitle: string;
   pdfText: string;
+  pdfPageTexts?: string[];
   transcriptText?: string;
   notionText?: string;
   customNotes?: string;
@@ -127,20 +146,51 @@ export function generateLocalStudyPack(input: {
   const mergedExtras = cleanText([input.transcriptText, input.notionText, input.customNotes].filter(Boolean).join('\n'));
   const subject = inferSubject(mergedPdf, input.lectureTitle);
   const examFocus = makeExamFocus(mergedPdf, mergedExtras);
-  const notesByPage = makeNotesByPage(mergedPdf);
+  const notesByPage = makeNotesByPage(mergedPdf, input.pdfPageTexts);
   const questions = makeQuestions(examFocus);
 
   const visuals: GenerationResult['visuals'] = [];
   if (subject === '수학') {
     visuals.push({
-      title: '핵심 개념 비교표',
+      title: '핵심 수식 카드',
+      page: notesByPage[0]?.page || 1,
+      kind: 'formula',
+      caption: '핵심 개념을 식으로 짧게 정리한 카드',
+      formula: {
+        expression: 'output = input x weight + bias',
+        meaning: examFocus[0] || '핵심 관계를 식으로 요약했습니다.',
+        example: examFocus[1] || '각 항이 어떤 의미인지 함께 복습하세요.',
+      },
+    });
+  } else if (subject === '컴퓨터공학') {
+    visuals.push({
+      title: '처리 흐름 카드',
+      page: notesByPage[0]?.page || 1,
+      kind: 'flowchart',
+      caption: '로컬 모드에서 만든 간단한 처리 흐름',
+      flowchart: {
+        nodes: [
+          { id: 'n1', label: '입력 확인' },
+          { id: 'n2', label: '핵심 처리' },
+          { id: 'n3', label: '출력/결과' },
+        ],
+        edges: [
+          { from: 'n1', to: 'n2', label: '다음 단계' },
+          { from: 'n2', to: 'n3', label: '결과 도출' },
+        ],
+      },
+    });
+  } else if (examFocus.length >= 2) {
+    visuals.push({
+      title: '핵심 비교 카드',
+      page: notesByPage[Math.min(1, notesByPage.length - 1)]?.page || 1,
       kind: 'table',
-      caption: '로컬 모드에서 자동 생성된 비교 요약',
+      caption: '시험 포인트를 빠르게 비교하는 표',
       table: {
-        columns: ['개념', '핵심 설명', '시험 포인트'],
-        rows: examFocus.slice(0, 4).map((f) => {
-          const lines = wrap(f, 18);
-          return [lines[0] || '개념', lines.slice(1).join(' ') || f, '정의/적용/주의점'];
+        columns: ['항목', '핵심 설명'],
+        rows: examFocus.slice(0, 3).map((focus) => {
+          const lines = wrap(focus, 20);
+          return [lines[0] || '핵심', lines.slice(1).join(' ') || focus];
         }),
       },
     });

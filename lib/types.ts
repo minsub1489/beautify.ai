@@ -2,7 +2,8 @@ export type Point = { x: number; y: number; label?: string };
 
 export type VisualSpec = {
   title: string;
-  kind: 'graph' | 'timeline' | 'table' | 'flowchart';
+  page?: number;
+  kind: 'graph' | 'timeline' | 'table' | 'flowchart' | 'formula';
   caption: string;
   graph?: {
     xLabel: string;
@@ -19,6 +20,11 @@ export type VisualSpec = {
   flowchart?: {
     nodes: { id: string; label: string }[];
     edges: { from: string; to: string; label?: string }[];
+  };
+  formula?: {
+    expression: string;
+    meaning?: string;
+    example?: string;
   };
 };
 

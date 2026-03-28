@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { generateSchema } from '@/lib/validators';
 import { generateAnnotatedNotes, inferSubjectFromMaterials } from '@/lib/ai';
 import { readNotionPageBlocks } from '@/lib/notion';
-import { annotatePdfWithNotes, extractPdfText } from '@/lib/pdf';
+import { annotatePdfWithNotes, extractPdfText, extractPdfTextsByPage } from '@/lib/pdf';
 import { putBuffer } from '@/lib/storage';
 import { transcribeAudioFromBuffer } from '@/lib/transcribe';
 import { getCurrentUserId } from '@/lib/auth-user';
@@ -309,6 +309,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: '먼저 PDF를 업로드하세요.' }, { status: 400 });
     }
 
+    const originalPdf = await readPdfAssetBytes({
+      storageKey: latestPdf.storageKey,
+      publicUrl: latestPdf.publicUrl,
+    });
+    const pdfPageTexts = await extractPdfTextsByPage(originalPdf);
+
     const transcriptText = projectForGeneration.assets
       .filter((asset) => asset.kind === 'audio')
       .map((asset) => asset.extractedText || '')
@@ -351,6 +357,7 @@ export async function POST(req: Request) {
       result = generateLocalStudyPack({
         lectureTitle: projectForGeneration.title,
         pdfText: latestPdf.extractedText || '',
+        pdfPageTexts,
         transcriptText,
         notionText,
         customNotes: mergedNotes,
@@ -361,6 +368,7 @@ export async function POST(req: Request) {
           subject: projectForGeneration.subject ?? '미지정',
           lectureTitle: projectForGeneration.title,
           pdfText: latestPdf.extractedText || '',
+          pdfPages: pdfPageTexts.map((text, index) => ({ page: index + 1, text })),
           transcriptText,
           notionText,
           customNotes: mergedNotes,
@@ -371,6 +379,7 @@ export async function POST(req: Request) {
           result = generateLocalStudyPack({
             lectureTitle: projectForGeneration.title,
             pdfText: latestPdf.extractedText || '',
+            pdfPageTexts,
             transcriptText,
             notionText,
             customNotes: mergedNotes,
@@ -381,10 +390,6 @@ export async function POST(req: Request) {
       }
     }
 
-    const originalPdf = await readPdfAssetBytes({
-      storageKey: latestPdf.storageKey,
-      publicUrl: latestPdf.publicUrl,
-    });
     const annotated = await annotatePdfWithNotes({ originalPdf, notesByPage: result.notesByPage, visuals: result.visuals });
     const out = await putBuffer({ bytes: annotated, filename: `${projectForGeneration.title}-annotated.pdf`, contentType: 'application/pdf', folder: 'output' });
 
