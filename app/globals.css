@@ -34,7 +34,7 @@ pre { white-space: pre-wrap; word-break: break-word; background: #fafbff; paddin
 .fileBadge { margin-top: 10px; display: inline-flex; padding: 8px 12px; border-radius: 999px; background: #f4f7ff; color: #3553b7; font-size: 13px; font-weight: 600; }
 .hiddenInput { display: none; }
 .composerRow { display: flex; gap: 10px; align-items: flex-end; }
-.composerInput { min-height: 96px; }
+.composerInput { min-height: 150px; }
 .composerActions { display: flex; gap: 10px; align-items: center; }
 .clipButton { background: #f7f9ff; border-color: #c9d6ff; color: #2747ab; }
 .attachmentList { display: flex; flex-wrap: wrap; gap: 8px; }

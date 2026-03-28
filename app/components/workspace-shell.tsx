@@ -95,6 +95,7 @@ export function WorkspaceShell({
 }) {
   const router = useRouter();
   const attachmentRef = useRef<HTMLInputElement>(null);
+  const quizPdfRef = useRef<HTMLInputElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [pdfName, setPdfName] = useState('');
@@ -715,9 +716,47 @@ export function WorkspaceShell({
               )}
             </div>
           ) : (
-            <div className="card stack previewCard quizCard">
+            <div
+              className="card stack previewCard quizCard"
+              onDragEnter={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                if (e.currentTarget === e.target) setDragging(false);
+              }}
+              onDrop={async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDragging(false);
+                await handleDrop(e.dataTransfer.files);
+              }}
+            >
+              {dragging ? <div className="previewDropOverlay">여기에 PDF를 놓으면 업로드됩니다</div> : null}
               <div className="quizHeader">
                 <div className="sectionTitle">시험 대비 퀴즈</div>
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => quizPdfRef.current?.click()}
+                >
+                  PDF 올리기
+                </button>
+                <input
+                  ref={quizPdfRef}
+                  className="hiddenInput"
+                  type="file"
+                  accept="application/pdf,audio/*"
+                  onChange={async (event) => {
+                    await handleDrop(event.target.files);
+                    event.currentTarget.value = '';
+                  }}
+                />
               </div>
 
               {selectedProject?.lastRun?.summary ? (
@@ -737,7 +776,7 @@ export function WorkspaceShell({
               ) : (
                 <div className="dropZone previewEmpty">
                   <div className="dropZoneTitle">퀴즈가 아직 없습니다</div>
-                  <div className="muted">PDF 업로드 후 생성을 누르면 중요한 부분 중심으로 중간/기말 대비 퀴즈가 만들어집니다.</div>
+                  <div className="muted">PDF 업로드 후 생성을 누르면 중요한 부분 중심으로 시험 대비 퀴즈가 만들어집니다.</div>
                 </div>
               )}
             </div>
@@ -748,7 +787,6 @@ export function WorkspaceShell({
             <input type="hidden" name="redirectTo" value="/" />
             <input type="hidden" name="customNotes" value="" />
 
-            <div className="sectionTitle">생성</div>
             <div className="viewToggle" role="tablist" aria-label="작업 보기 전환">
               <button
                 type="button"
