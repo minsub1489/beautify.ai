@@ -21,31 +21,50 @@ export async function annotatePdfWithNotes(params: {
     const pageIndex = Math.max(0, Math.min(item.page - 1, pages.length - 1));
     const page = pages[pageIndex];
     const { width, height } = page.getSize();
-    const marginWidth = Math.min(210, Math.max(165, width * 0.27));
+    const noteWidth = Math.min(248, Math.max(190, width * 0.28));
+    const maxCardHeight = Math.min(height * 0.72, 420);
+    const noteLines = wrapText(item.notes, 30);
+    const important = extractImportantPoints(item.notes).slice(0, 3);
+
+    const estimatedHeight = Math.min(
+      maxCardHeight,
+      64 + important.length * 44 + Math.max(48, noteLines.length * 11.2),
+    );
+    const placement = pickPlacement({
+      pageIndex,
+      width,
+      height,
+      noteWidth,
+      noteHeight: estimatedHeight,
+      text: item.notes,
+    });
+    const cardX = placement.x;
+    const cardY = placement.y;
 
     page.drawRectangle({
-      x: width - marginWidth,
-      y: 0,
-      width: marginWidth,
-      height,
+      x: cardX,
+      y: cardY,
+      width: noteWidth,
+      height: estimatedHeight,
       color: rgb(0.97, 0.98, 1),
-      opacity: 0.98,
+      opacity: 0.97,
+      borderColor: rgb(0.84, 0.89, 0.98),
+      borderWidth: 1,
     });
 
     page.drawText('AI 필기', {
-      x: width - marginWidth + 14,
-      y: height - 22,
-      size: 12,
+      x: cardX + 12,
+      y: cardY + estimatedHeight - 20,
+      size: 11,
       font: fontBold,
       color: rgb(0.16, 0.24, 0.55),
     });
 
-    const important = extractImportantPoints(item.notes).slice(0, 3);
-    let y = height - 42;
+    let y = cardY + estimatedHeight - 38;
 
     if (important.length) {
       page.drawText('형광펜 포인트', {
-        x: width - marginWidth + 14,
+        x: cardX + 12,
         y,
         size: 8.5,
         font: fontBold,
@@ -56,9 +75,9 @@ export async function annotatePdfWithNotes(params: {
         const pointLines = wrapText(point, 24).slice(0, 2);
         const boxHeight = Math.max(18, pointLines.length * 10 + 6);
         page.drawRectangle({
-          x: width - marginWidth + 12,
+          x: cardX + 10,
           y: y - boxHeight + 4,
-          width: marginWidth - 24,
+          width: noteWidth - 20,
           height: boxHeight,
           color: rgb(1, 0.95, 0.55),
           opacity: 0.72,
@@ -66,7 +85,7 @@ export async function annotatePdfWithNotes(params: {
         let pointY = y - 4;
         for (const line of pointLines) {
           page.drawText(line, {
-            x: width - marginWidth + 16,
+            x: cardX + 14,
             y: pointY,
             size: 8.2,
             font,
@@ -80,15 +99,15 @@ export async function annotatePdfWithNotes(params: {
 
       // Tiny sticky memo block.
       page.drawRectangle({
-        x: width - marginWidth + 12,
+        x: cardX + 10,
         y: y - 32,
-        width: marginWidth - 24,
+        width: noteWidth - 20,
         height: 28,
         color: rgb(1, 0.98, 0.85),
         opacity: 0.92,
       });
       page.drawText('메모: 시험 전 이 포인트만 빠르게 복습', {
-        x: width - marginWidth + 16,
+        x: cardX + 14,
         y: y - 20,
         size: 7.6,
         font,
@@ -97,11 +116,11 @@ export async function annotatePdfWithNotes(params: {
       y -= 40;
     }
 
-    const lines = wrapText(item.notes, 27);
+    const lines = noteLines;
     let lineCursor = 0;
     for (const line of lines) {
       page.drawText(line, {
-        x: width - marginWidth + 14,
+        x: cardX + 12,
         y,
         size: 8.5,
         font,
@@ -109,7 +128,7 @@ export async function annotatePdfWithNotes(params: {
       });
       y -= 11.2;
       lineCursor += 1;
-      if (y < 16) break;
+      if (y < cardY + 10) break;
     }
 
     const overflow = lines.slice(lineCursor);
@@ -137,6 +156,41 @@ export async function annotatePdfWithNotes(params: {
   }
 
   return Buffer.from(await doc.save());
+}
+
+function pickPlacement(params: {
+  pageIndex: number;
+  width: number;
+  height: number;
+  noteWidth: number;
+  noteHeight: number;
+  text: string;
+}) {
+  const baseMargin = Math.max(14, params.width * 0.02);
+  const side = params.pageIndex % 2 === 0 ? 'right' : 'left';
+
+  let x = side === 'right'
+    ? params.width - params.noteWidth - baseMargin
+    : baseMargin;
+
+  const normalized = params.text.replace(/\s+/g, ' ').trim();
+  const hash = normalized.split('').reduce((acc, ch) => (acc + ch.charCodeAt(0)) % 97, 0);
+  const bucket = hash % 3; // top / middle / lower
+  const availableY = params.height - params.noteHeight - baseMargin;
+  let y = baseMargin;
+
+  if (bucket === 0) y = Math.max(baseMargin, availableY);
+  if (bucket === 1) y = Math.max(baseMargin, availableY * 0.56);
+  if (bucket === 2) y = Math.max(baseMargin, availableY * 0.18);
+
+  if (params.noteWidth > params.width * 0.46) {
+    x = Math.max(baseMargin, params.width - params.noteWidth - baseMargin);
+  }
+
+  return {
+    x,
+    y,
+  };
 }
 
 function insertContinuationNotePages(params: {

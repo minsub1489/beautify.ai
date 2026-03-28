@@ -362,16 +362,16 @@ export function toUserFacingGeminiError(error: unknown) {
     : '';
 
   if (status === 429 || /quota|billing|rate limit|RESOURCE_EXHAUSTED/i.test(message)) {
-    return 'Gemini API 한도를 초과했습니다. 결제/크레딧 상태를 확인한 뒤 다시 시도해 주세요.';
+    return 'AI API 한도를 초과했습니다. Gemini/OpenAI/OpenRouter 키와 결제 상태를 확인해 주세요.';
   }
-  if (status === 401 || status === 403 || /API key not valid|permission/i.test(message)) {
-    return 'Gemini API 키 또는 권한 설정을 확인해 주세요.';
+  if (status === 401 || status === 403 || /API key not valid|permission|invalid_api_key|Incorrect API key/i.test(message)) {
+    return 'AI API 키 또는 권한 설정을 확인해 주세요. (.env의 GEMINI_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY)';
   }
   if (status === 400) {
-    return 'Gemini 요청 형식이 올바르지 않습니다. 입력 데이터와 모델 설정을 확인해 주세요.';
+    return 'AI 요청 형식이 올바르지 않습니다. 입력 데이터와 모델 설정을 확인해 주세요.';
   }
   if (status === 500 || status === 502 || status === 503 || status === 504) {
-    return 'Gemini 서버가 일시적으로 불안정합니다. 잠시 후 다시 시도해 주세요.';
+    return 'AI 서버가 일시적으로 불안정합니다. 잠시 후 다시 시도해 주세요.';
   }
 
   return message || 'Gemini 요청 중 오류가 발생했습니다.';
