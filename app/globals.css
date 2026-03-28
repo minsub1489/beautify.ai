@@ -787,3 +787,119 @@ pre {
     transform: rotate(18deg) translateX(390%);
   }
 }
+
+.previewModeButtonActive {
+  border-color: #f3a8cb;
+  background: linear-gradient(135deg, #fff6fb 0%, #ffe8f3 100%);
+  color: #a61e73;
+}
+
+.pageEditorHeaderSide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.pageEditorGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.pageEditorCard {
+  position: relative;
+  min-height: 132px;
+  border-radius: 18px;
+  border: 1px solid #d6e1ff;
+  background: #fff;
+  padding: 14px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: grab;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.pageEditorCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+}
+
+.pageEditorCard.dragging {
+  opacity: 0.62;
+  transform: scale(0.98);
+}
+
+.pageEditorCard.dragOver {
+  border-color: #2563eb;
+  background: #eef4ff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.pageEditorRemove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: #fff1f2;
+  color: #dc2626;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.pageEditorRemove:hover {
+  transform: scale(1.04);
+  background: #ffe4e6;
+}
+
+.pageEditorRemove:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pageEditorCardIndex {
+  font-size: 28px;
+  font-weight: 800;
+  color: #2563eb;
+  line-height: 1;
+}
+
+.pageEditorCardTitle {
+  font-size: 14px;
+  font-weight: 800;
+  color: #132a63;
+}
+
+.pageEditorCardMeta {
+  font-size: 12px;
+  color: #51607f;
+}
+
+.pageEditorCardHint {
+  margin-top: auto;
+  font-size: 12px;
+  color: #7b87a1;
+}
+
+@media (max-width: 1080px) {
+  .pageEditorHeaderSide {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .pageEditorGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

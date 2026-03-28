@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Languages, Paperclip, Pencil, Plus, Trash2, UploadCloud } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Languages, Paperclip, Pencil, Plus, Trash2, UploadCloud, X } from 'lucide-react';
 import { AuthControls } from './auth-controls';
 
 type ProjectItem = {
@@ -287,12 +287,14 @@ export function WorkspaceShell({
   const [quizAutoGenerating, setQuizAutoGenerating] = useState(false);
   const [quizAutoStatus, setQuizAutoStatus] = useState('');
   const [quizAutoTriggeredFor, setQuizAutoTriggeredFor] = useState('');
+  const [pdfEditMode, setPdfEditMode] = useState(false);
   const [pdfPageItems, setPdfPageItems] = useState<PageEditorItem[]>([]);
   const [pdfPageInitialOrder, setPdfPageInitialOrder] = useState<number[]>([]);
-  const [pdfPageClipboard, setPdfPageClipboard] = useState<number | null>(null);
   const [pdfPageLoading, setPdfPageLoading] = useState(false);
   const [pdfPageSaving, setPdfPageSaving] = useState(false);
   const [pdfPageStatus, setPdfPageStatus] = useState('');
+  const [draggingPdfPageId, setDraggingPdfPageId] = useState('');
+  const [dragOverPdfPageId, setDragOverPdfPageId] = useState('');
 
   const quickPrompts = useMemo(
     () => [
@@ -427,12 +429,14 @@ export function WorkspaceShell({
     setPdfRemoveStatus('');
     setRegeneratingPage(null);
     setPageRegenerationStatus('');
+    setPdfEditMode(false);
     setPdfPageItems([]);
     setPdfPageInitialOrder([]);
-    setPdfPageClipboard(null);
     setPdfPageLoading(false);
     setPdfPageSaving(false);
     setPdfPageStatus('');
+    setDraggingPdfPageId('');
+    setDragOverPdfPageId('');
   }, [selectedProject?.id]);
 
   useEffect(() => {
@@ -475,10 +479,12 @@ export function WorkspaceShell({
     if (!assetId) {
       setPdfPageItems([]);
       setPdfPageInitialOrder([]);
-      setPdfPageClipboard(null);
+      setPdfEditMode(false);
       setPdfPageSaving(false);
       setPdfPageStatus('');
       setPdfPageLoading(false);
+      setDraggingPdfPageId('');
+      setDragOverPdfPageId('');
       return () => {
         active = false;
       };
@@ -486,8 +492,9 @@ export function WorkspaceShell({
 
     async function loadPdfPages() {
       setPdfPageLoading(true);
-      setPdfPageClipboard(null);
       setPdfPageStatus('');
+      setDraggingPdfPageId('');
+      setDragOverPdfPageId('');
       try {
         const response = await fetch(`/api/assets/${assetId}/pages`);
         const payload = await response.json().catch(() => ({}));
@@ -869,22 +876,6 @@ export function WorkspaceShell({
     setPdfPageStatus('');
   }
 
-  function copyPdfPage(sourcePage: number) {
-    setPdfPageClipboard(sourcePage);
-    setPdfPageStatus(`원본 ${sourcePage}페이지를 복사했습니다.`);
-  }
-
-  function pastePdfPage(afterIndex: number) {
-    if (!pdfPageClipboard) return;
-
-    setPdfPageItems((prev) => {
-      const next = [...prev];
-      next.splice(afterIndex + 1, 0, createPageEditorItem(pdfPageClipboard));
-      return next;
-    });
-    setPdfPageStatus(`원본 ${pdfPageClipboard}페이지를 붙여넣었습니다.`);
-  }
-
   function deletePdfPage(index: number) {
     setPdfPageItems((prev) => {
       if (prev.length <= 1) {
@@ -896,8 +887,36 @@ export function WorkspaceShell({
     });
   }
 
+  function deletePdfPageById(itemId: string) {
+    const index = pdfPageItems.findIndex((item) => item.id === itemId);
+    if (index < 0) return;
+    deletePdfPage(index);
+  }
+
+  function movePdfPageById(sourceId: string, targetId: string) {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+
+    setPdfPageItems((prev) => {
+      const sourceIndex = prev.findIndex((item) => item.id === sourceId);
+      const targetIndex = prev.findIndex((item) => item.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return prev;
+
+      const next = [...prev];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+    setPdfPageStatus('페이지 순서를 바꿨습니다. 변경 적용을 누르면 새 PDF에 반영됩니다.');
+  }
+
+  function resetPdfDragState() {
+    setDraggingPdfPageId('');
+    setDragOverPdfPageId('');
+  }
+
   function resetPdfPageEdits() {
     setPdfPageItems(pdfPageInitialOrder.map((page) => createPageEditorItem(page)));
+    resetPdfDragState();
     setPdfPageStatus('페이지 구성을 원본 순서로 되돌렸습니다.');
   }
 
@@ -936,6 +955,8 @@ export function WorkspaceShell({
       setQuizAutoTriggeredFor('');
       setQuizAutoStatus('');
       setPageRegenerationStatus('');
+      setPdfEditMode(false);
+      resetPdfDragState();
       setPdfPageStatus('페이지 편집을 적용했습니다. 최신 PDF로 화면을 갱신합니다.');
       router.refresh();
     } catch {
@@ -1252,14 +1273,29 @@ export function WorkspaceShell({
                       ? '번역 중...'
                       : translationMode === 'translated'
                         ? '원문 보기'
-                        : '번역'}
+                      : '번역'}
+                  </button>
+                ) : null}
+                {latestPdfAsset ? (
+                  <button
+                    className={`button secondary ${pdfEditMode ? 'previewModeButtonActive' : ''}`}
+                    type="button"
+                    onClick={() => setPdfEditMode((prev) => !prev)}
+                    disabled={pdfPageLoading || pdfPageSaving}
+                    title={pdfEditMode ? '편집 모드 닫기' : 'PDF 편집 모드 열기'}
+                  >
+                    <Pencil size={16} />
+                    {pdfEditMode ? '편집 닫기' : '편집'}
                   </button>
                 ) : null}
                 {latestPdfAsset ? (
                   <button
                     className="button danger"
                     type="button"
-                    onClick={() => void removeLatestPdf()}
+                    onClick={() => {
+                      setPdfEditMode(false);
+                      void removeLatestPdf();
+                    }}
                     disabled={pdfRemoving}
                     title={`${latestPdfAsset.originalName} 제거`}
                   >
@@ -1414,17 +1450,24 @@ export function WorkspaceShell({
                     <div className="pageEditorHeader">
                       <div>
                         <div className="sectionTitle">PDF 페이지 편집</div>
-                        <div className="muted">현재 업로드된 원본 PDF를 기준으로 순서 변경, 삭제, 복사, 붙여넣기를 적용합니다.</div>
+                        <div className="muted">편집 버튼을 누르면 페이지 카드를 드래그해서 순서를 바꾸고, 오른쪽 위 X로 바로 제거할 수 있습니다.</div>
                       </div>
-                      <div className="pageEditorCountBadge">총 {currentPdfPageCount}페이지</div>
+                      <div className="pageEditorHeaderSide">
+                        <div className="pageEditorCountBadge">총 {currentPdfPageCount}페이지</div>
+                        <button
+                          type="button"
+                          className={`button secondary ${pdfEditMode ? 'previewModeButtonActive' : ''}`}
+                          onClick={() => setPdfEditMode((prev) => !prev)}
+                          disabled={pdfPageLoading || pdfPageSaving}
+                        >
+                          <Pencil size={16} />
+                          {pdfEditMode ? '편집 닫기' : '편집 모드'}
+                        </button>
+                      </div>
                     </div>
 
                     <div className="pageEditorToolbar">
-                      <div className="muted">
-                        {pdfPageClipboard
-                          ? `복사됨: 원본 ${pdfPageClipboard}페이지`
-                          : '복사한 페이지가 없습니다.'}
-                      </div>
+                      <div className="muted">{pdfEditMode ? '페이지 카드를 끌어서 원하는 위치에 놓으세요.' : '편집 모드를 열면 페이지별 카드가 나타납니다.'}</div>
                       <div className="row">
                         <button
                           type="button"
@@ -1447,56 +1490,55 @@ export function WorkspaceShell({
 
                     {pdfPageLoading ? (
                       <div className="pageEditorEmpty">PDF 페이지를 불러오는 중...</div>
+                    ) : !pdfEditMode ? (
+                      <div className="pageEditorEmpty">편집 모드를 열면 페이지 카드가 나타나고, 드래그앤드롭과 X 삭제가 가능해집니다.</div>
                     ) : pdfPageItems.length ? (
-                      <div className="pageEditorList">
+                      <div className="pageEditorGrid">
                         {pdfPageItems.map((item, index) => (
-                          <div key={item.id} className="pageEditorItem">
-                            <div className="pageEditorItemMain">
-                              <div className="pageEditorTitle">현재 {index + 1}페이지</div>
-                              <div className="pageEditorMeta">원본 {item.sourcePage}페이지</div>
-                            </div>
-                            <div className="pageEditorActions">
-                              <button
-                                type="button"
-                                className="button secondary pageEditorButton"
-                                onClick={() => movePdfPage(index, -1)}
-                                disabled={pdfPageSaving || index === 0}
-                              >
-                                위로
-                              </button>
-                              <button
-                                type="button"
-                                className="button secondary pageEditorButton"
-                                onClick={() => movePdfPage(index, 1)}
-                                disabled={pdfPageSaving || index === pdfPageItems.length - 1}
-                              >
-                                아래로
-                              </button>
-                              <button
-                                type="button"
-                                className="button secondary pageEditorButton"
-                                onClick={() => copyPdfPage(item.sourcePage)}
-                                disabled={pdfPageSaving}
-                              >
-                                복사
-                              </button>
-                              <button
-                                type="button"
-                                className="button secondary pageEditorButton"
-                                onClick={() => pastePdfPage(index)}
-                                disabled={pdfPageSaving || !pdfPageClipboard}
-                              >
-                                붙여넣기 아래
-                              </button>
-                              <button
-                                type="button"
-                                className="button secondary pageEditorButton"
-                                onClick={() => deletePdfPage(index)}
-                                disabled={pdfPageSaving || pdfPageItems.length <= 1}
-                              >
-                                삭제
-                              </button>
-                            </div>
+                          <div
+                            key={item.id}
+                            className={`pageEditorCard ${draggingPdfPageId === item.id ? 'dragging' : ''} ${dragOverPdfPageId === item.id ? 'dragOver' : ''}`}
+                            draggable={!pdfPageSaving}
+                            onDragStart={(event) => {
+                              event.dataTransfer.effectAllowed = 'move';
+                              event.dataTransfer.setData('text/plain', item.id);
+                              setDraggingPdfPageId(item.id);
+                              setDragOverPdfPageId(item.id);
+                            }}
+                            onDragOver={(event) => {
+                              event.preventDefault();
+                              if (draggingPdfPageId && draggingPdfPageId !== item.id) {
+                                setDragOverPdfPageId(item.id);
+                              }
+                            }}
+                            onDragLeave={() => {
+                              if (dragOverPdfPageId === item.id) setDragOverPdfPageId('');
+                            }}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              const sourceId = event.dataTransfer.getData('text/plain') || draggingPdfPageId;
+                              movePdfPageById(sourceId, item.id);
+                              resetPdfDragState();
+                            }}
+                            onDragEnd={resetPdfDragState}
+                          >
+                            <button
+                              type="button"
+                              className="pageEditorRemove"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                deletePdfPageById(item.id);
+                              }}
+                              disabled={pdfPageSaving || pdfPageItems.length <= 1}
+                              aria-label={`${index + 1}페이지 제거`}
+                              title="페이지 제거"
+                            >
+                              <X size={14} />
+                            </button>
+                            <div className="pageEditorCardIndex">{index + 1}</div>
+                            <div className="pageEditorCardTitle">현재 {index + 1}페이지</div>
+                            <div className="pageEditorCardMeta">원본 {item.sourcePage}페이지</div>
+                            <div className="pageEditorCardHint">드래그해서 위치 이동</div>
                           </div>
                         ))}
                       </div>
