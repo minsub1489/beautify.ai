@@ -108,9 +108,9 @@ export function WorkspaceShell({
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const [translationMode, setTranslationMode] = useState<'original' | 'translated'>('original');
-  const [translationLines, setTranslationLines] = useState<{ original: string; translation: string }[]>([]);
   const [translationLoading, setTranslationLoading] = useState(false);
   const [translationStatus, setTranslationStatus] = useState('');
+  const [translatedAssetId, setTranslatedAssetId] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [titleSaving, setTitleSaving] = useState(false);
@@ -144,7 +144,7 @@ export function WorkspaceShell({
 
   const quizItems = useMemo(() => parseQuizItems(selectedProject?.lastRun?.questionsJson), [selectedProject?.lastRun?.questionsJson]);
 
-  const previewPdfUrl = useMemo(() => {
+  const basePreviewPdfUrl = useMemo(() => {
     if (!selectedProject) return '';
 
     const latestOutput = [...selectedProject.assets]
@@ -159,6 +159,13 @@ export function WorkspaceShell({
 
     return '';
   }, [selectedProject]);
+
+  const previewPdfUrl = useMemo(() => {
+    if (translationMode === 'translated' && translatedAssetId) {
+      return `/api/assets/${translatedAssetId}/raw`;
+    }
+    return basePreviewPdfUrl;
+  }, [basePreviewPdfUrl, translatedAssetId, translationMode]);
 
   const SIDEBAR_MIN = 220;
   const SIDEBAR_MAX = 520;
@@ -212,7 +219,7 @@ export function WorkspaceShell({
 
   useEffect(() => {
     setTranslationMode('original');
-    setTranslationLines([]);
+    setTranslatedAssetId('');
     setTranslationLoading(false);
     setTranslationStatus('');
   }, [selectedProject?.id]);
@@ -431,7 +438,7 @@ export function WorkspaceShell({
   }
 
   async function toggleTranslation() {
-    if (!selectedProject?.id) return;
+    if (!selectedProject?.id || !basePreviewPdfUrl) return;
 
     if (translationMode === 'translated') {
       setTranslationMode('original');
@@ -439,27 +446,28 @@ export function WorkspaceShell({
     }
 
     setTranslationMode('translated');
-    if (translationLines.length) return;
+    if (translatedAssetId) return;
 
     setTranslationLoading(true);
     setTranslationStatus('');
     try {
-      const response = await fetch(`/api/projects/${selectedProject.id}/translate`, { method: 'GET' });
+      const response = await fetch(`/api/projects/${selectedProject.id}/translate-pdf`, { method: 'POST' });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         setTranslationStatus(typeof payload?.error === 'string' ? payload.error : '번역을 불러오지 못했습니다.');
+        setTranslationMode('original');
         return;
       }
-      if (!payload?.detected) {
-        setTranslationStatus('번역할 문장을 찾지 못했습니다.');
+      if (!payload?.assetId || typeof payload.assetId !== 'string') {
+        setTranslationStatus('번역 PDF를 생성하지 못했습니다.');
+        setTranslationMode('original');
         return;
       }
-      setTranslationLines(Array.isArray(payload.lines) ? payload.lines : []);
-      if (!payload.lines?.length) {
-        setTranslationStatus('번역할 문장을 찾지 못했습니다.');
-      }
+      setTranslatedAssetId(payload.assetId);
+      setTranslationStatus('번역된 PDF를 적용했습니다.');
     } catch {
       setTranslationStatus('번역 요청 중 네트워크 오류가 발생했습니다.');
+      setTranslationMode('original');
     } finally {
       setTranslationLoading(false);
     }
@@ -668,11 +676,15 @@ export function WorkspaceShell({
                   className="button secondary"
                   type="button"
                   onClick={toggleTranslation}
-                  disabled={translationLoading}
+                  disabled={translationLoading && translationMode !== 'translated'}
                   title={translationMode === 'translated' ? '원문 보기로 전환' : '한국어 번역 보기'}
                 >
                   <Languages size={16} />
-                  {translationMode === 'translated' ? '원문 보기' : '번역'}
+                  {translationLoading && translationMode !== 'translated'
+                    ? '번역 중...'
+                    : translationMode === 'translated'
+                      ? '원문 보기'
+                      : '번역'}
                 </button>
               ) : null}
             </div>
@@ -700,19 +712,7 @@ export function WorkspaceShell({
               </div>
             )}
 
-            {translationMode === 'translated' ? (
-              <div className="translationPanel">
-                <div className="sectionTitle">번역 결과 (한국어)</div>
-                {translationLoading ? <div className="muted">번역을 불러오는 중...</div> : null}
-                {translationStatus ? <div className="muted">{translationStatus}</div> : null}
-                {translationLines.map((line, idx) => (
-                  <div key={`${line.original}-${idx}`} className="translationLine">
-                    <div className="translationOriginal">{line.original}</div>
-                    <div className="translationSub">{line.translation}</div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
+            {translationStatus ? <div className="muted">{translationStatus}</div> : null}
 
             {workspaceView === 'quiz' ? (
               <>
