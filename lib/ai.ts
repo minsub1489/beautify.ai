@@ -128,8 +128,8 @@ export async function generateAnnotatedNotes(payload: {
 12) 코딩/AI 계열이면 개념 정의뿐 아니라 "입력→처리→출력", 함수 역할, 모델 흐름, 학습 포인트, 자주 틀리는 부분을 강조하라.
 13) 딥러닝/AI 계열이면 수식이 있더라도 직관, 손실함수 의미, 역전파/학습 흐름, 모델 비교를 학생이 이해하기 쉽게 바꿔라.
 14) 사용자가 메모를 채팅처럼 여러 개 넣었으면 각 메모를 모두 반영하라.
-15) reviewQuestions는 최소 8개 이상 만들고, exam='midterm'와 exam='final'을 균형 있게 포함해라.
-16) reviewQuestions는 반드시 핵심 개념/비교/적용/함정 포인트 위주로 출제하고 answer는 1~3문장으로 간결히 작성해라.
+15) reviewQuestions는 최소 8개 이상 만들고, 반드시 핵심 개념/비교/적용/함정 포인트 위주로 출제해라.
+16) answer는 1~3문장으로 간결히 작성해라.
 17) hint는 한 줄 힌트로 작성하고, 답을 그대로 반복하지 말아라.
 
 입력:
@@ -153,7 +153,7 @@ visuals: [
  또는
  {title, kind:'flowchart', caption, flowchart:{nodes:[{id,label}], edges:[{from,to,label?}]}}
 ]
-reviewQuestions: [{exam:'midterm'|'final', question:string, answer:string, hint?:string}]
+reviewQuestions: [{question:string, answer:string, hint?:string}]
 `;
 
   try {
@@ -250,12 +250,11 @@ reviewQuestions: [{exam:'midterm'|'final', question:string, answer:string, hint?
             items: {
               type: 'object',
               properties: {
-                exam: { type: 'string', enum: ['midterm', 'final'] },
                 question: { type: 'string' },
                 answer: { type: 'string' },
                 hint: { anyOf: [{ type: 'string' }, { type: 'null' }] },
               },
-              required: ['exam', 'question', 'answer', 'hint'],
+              required: ['question', 'answer', 'hint'],
             },
           }
         },

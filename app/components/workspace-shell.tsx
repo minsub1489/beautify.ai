@@ -48,7 +48,6 @@ type SelectedProject = {
 };
 
 type QuizItem = {
-  exam: 'midterm' | 'final';
   question: string;
   answer: string;
   hint?: string;
@@ -58,28 +57,17 @@ function sanitizeText(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
 }
 
-function normalizeExam(value: unknown): 'midterm' | 'final' | null {
-  if (value === 'midterm' || value === 'final') return value;
-  if (typeof value !== 'string') return null;
-  const lower = value.toLowerCase();
-  if (lower.includes('중간') || lower.includes('mid')) return 'midterm';
-  if (lower.includes('기말') || lower.includes('final')) return 'final';
-  return null;
-}
-
 function parseQuizItems(raw: unknown): QuizItem[] {
   if (!Array.isArray(raw)) return [];
 
   const parsed = raw
     .map((item): QuizItem | null => {
       if (typeof item === 'string') {
-        const exam = normalizeExam(item) || 'midterm';
         const question = item
           .replace(/^\s*(중간|기말|midterm|final)\s*[:|-]\s*/i, '')
           .trim();
         if (!question) return null;
         return {
-          exam,
           question,
           answer: '생성된 필기와 요약을 참고해 스스로 답해보세요.',
           hint: '핵심 용어 정의, 비교 포인트, 적용 예시를 함께 떠올려 보세요.',
@@ -88,25 +76,14 @@ function parseQuizItems(raw: unknown): QuizItem[] {
 
       if (!item || typeof item !== 'object') return null;
       const record = item as Record<string, unknown>;
-      const exam = normalizeExam(record.exam ?? record.type ?? record.phase) || 'midterm';
       const question = sanitizeText(record.question);
       const answer = sanitizeText(record.answer, '정답 요약이 제공되지 않았습니다.');
       const hint = sanitizeText(record.hint);
       if (!question) return null;
-      return { exam, question, answer, hint: hint || undefined };
+      return { question, answer, hint: hint || undefined };
     })
     .filter((item): item is QuizItem => Boolean(item));
-
-  if (!parsed.length) return [];
-
-  const hasFinal = parsed.some((item) => item.exam === 'final');
-  if (hasFinal) return parsed;
-
-  const midpoint = Math.ceil(parsed.length / 2);
-  return parsed.map((item, index) => ({
-    ...item,
-    exam: index < midpoint ? 'midterm' : 'final',
-  }));
+  return parsed;
 }
 
 export function WorkspaceShell({
@@ -144,7 +121,6 @@ export function WorkspaceShell({
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [autoRechargeEnabled, setAutoRechargeEnabled] = useState(false);
   const [workspaceView, setWorkspaceView] = useState<'notes' | 'quiz'>('notes');
-  const [quizExam, setQuizExam] = useState<'midterm' | 'final'>('midterm');
 
   const quickPrompts = useMemo(
     () => [
@@ -167,9 +143,6 @@ export function WorkspaceShell({
   );
 
   const quizItems = useMemo(() => parseQuizItems(selectedProject?.lastRun?.questionsJson), [selectedProject?.lastRun?.questionsJson]);
-  const midtermQuiz = useMemo(() => quizItems.filter((item) => item.exam === 'midterm'), [quizItems]);
-  const finalQuiz = useMemo(() => quizItems.filter((item) => item.exam === 'final'), [quizItems]);
-  const visibleQuiz = quizExam === 'midterm' ? midtermQuiz : finalQuiz;
 
   const previewPdfUrl = useMemo(() => {
     if (!selectedProject) return '';
@@ -260,7 +233,6 @@ export function WorkspaceShell({
 
   useEffect(() => {
     setWorkspaceView('notes');
-    setQuizExam('midterm');
   }, [selectedProject?.id]);
 
   useEffect(() => {
@@ -766,36 +738,16 @@ export function WorkspaceShell({
             <div className="card stack previewCard quizCard">
               <div className="quizHeader">
                 <div className="sectionTitle">시험 대비 퀴즈</div>
-                <div className="quizExamToggle" role="tablist" aria-label="시험 구간 선택">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={quizExam === 'midterm'}
-                    className={`chip ${quizExam === 'midterm' ? 'active' : ''}`}
-                    onClick={() => setQuizExam('midterm')}
-                  >
-                    중간고사
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={quizExam === 'final'}
-                    className={`chip ${quizExam === 'final' ? 'active' : ''}`}
-                    onClick={() => setQuizExam('final')}
-                  >
-                    기말고사
-                  </button>
-                </div>
               </div>
 
               {selectedProject?.lastRun?.summary ? (
                 <div className="quizSummary">{selectedProject.lastRun.summary}</div>
               ) : null}
 
-              {visibleQuiz.length ? (
+              {quizItems.length ? (
                 <div className="quizList">
-                  {visibleQuiz.map((item, idx) => (
-                    <div key={`${item.exam}-${idx}-${item.question}`} className="quizItem">
+                  {quizItems.map((item, idx) => (
+                    <div key={`${idx}-${item.question}`} className="quizItem">
                       <div className="quizQ">Q{idx + 1}. {item.question}</div>
                       <div className="quizHint">힌트: {item.hint || '핵심 키워드 3개를 먼저 적고, 개념 간 차이를 연결해 보세요.'}</div>
                       <div className="quizA">정답 포인트: {item.answer}</div>

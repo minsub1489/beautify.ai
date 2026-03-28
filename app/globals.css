@@ -124,8 +124,6 @@ pre { white-space: pre-wrap; word-break: break-word; background: #fafbff; paddin
 .translationSub { font-size: 12px; line-height: 1.5; color: var(--muted); margin-top: 4px; }
 .quizCard { min-height: 620px; overflow: auto; }
 .quizHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.quizExamToggle { display: inline-flex; align-items: center; gap: 8px; }
-.chip.active { background: #2563eb; color: #fff; }
 .quizSummary { border: 1px solid #dce7ff; border-radius: 14px; background: #f8fbff; padding: 12px 14px; color: #1e2a55; line-height: 1.6; }
 .quizList { display: flex; flex-direction: column; gap: 10px; }
 .quizItem { border: 1px solid var(--line); border-radius: 16px; padding: 14px; background: #fff; }
