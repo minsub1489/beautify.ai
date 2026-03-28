@@ -25,9 +25,12 @@ export type VisualSpec = {
 export type NotesByPage = { page: number; notes: string }[];
 
 export type QuizQuestion = {
+  type?: 'short' | 'ox' | 'mcq';
   question: string;
   answer: string;
   hint?: string;
+  options?: string[];
+  correctOptionIndex?: number;
 };
 
 export type GenerationResult = {

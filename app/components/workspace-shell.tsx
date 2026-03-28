@@ -50,8 +50,19 @@ type SelectedProject = {
 };
 
 type QuizItem = {
+  type: 'short' | 'ox' | 'mcq';
   question: string;
   answer: string;
+  hint?: string;
+  options?: string[];
+  correctOptionIndex?: number;
+};
+
+type WrongAnswerNote = {
+  question: string;
+  type: QuizItem['type'];
+  userAnswer: string;
+  correctAnswer: string;
   hint?: string;
 };
 
@@ -76,6 +87,7 @@ function parseQuizItems(raw: unknown): QuizItem[] {
           .trim();
         if (!question) return null;
         return {
+          type: 'short',
           question,
           answer: '생성된 필기와 요약을 참고해 스스로 답해보세요.',
           hint: '핵심 용어 정의, 비교 포인트, 적용 예시를 함께 떠올려 보세요.',
@@ -84,14 +96,67 @@ function parseQuizItems(raw: unknown): QuizItem[] {
 
       if (!item || typeof item !== 'object') return null;
       const record = item as Record<string, unknown>;
+      const rawType = sanitizeText(record.type).toLowerCase();
       const question = sanitizeText(record.question);
       const answer = sanitizeText(record.answer, '정답 요약이 제공되지 않았습니다.');
       const hint = sanitizeText(record.hint);
+      const options = Array.isArray(record.options)
+        ? record.options.filter((value): value is string => typeof value === 'string').map((value) => value.trim()).filter(Boolean)
+        : [];
+      const normalizedAnswer = answer.toUpperCase();
+      const inferredType: QuizItem['type'] =
+        rawType === 'ox' || rawType === 'mcq' || rawType === 'short'
+          ? rawType
+          : options.length >= 2
+            ? 'mcq'
+            : normalizedAnswer === 'O' || normalizedAnswer === 'X'
+              ? 'ox'
+              : 'short';
+      const correctOptionIndex = typeof record.correctOptionIndex === 'number' && Number.isInteger(record.correctOptionIndex)
+        ? record.correctOptionIndex
+        : -1;
       if (!question) return null;
-      return { question, answer, hint: hint || undefined };
+      return {
+        type: inferredType === 'mcq' && options.length < 2 ? 'short' : inferredType,
+        question,
+        answer,
+        hint: hint || undefined,
+        options: options.length ? options.slice(0, 4) : undefined,
+        correctOptionIndex: correctOptionIndex >= 0 && correctOptionIndex <= 3 ? correctOptionIndex : undefined,
+      };
     })
     .filter((item): item is QuizItem => Boolean(item));
   return parsed;
+}
+
+function normalizeForCompare(text: string) {
+  return (text || '').toLowerCase().replace(/\s+/g, '').replace(/[.,!?'"`()[\]{}:;/-]/g, '');
+}
+
+function isQuizAnswerCorrect(item: QuizItem, userAnswer: string) {
+  const normalizedUser = normalizeForCompare(userAnswer);
+  if (!normalizedUser) return false;
+
+  if (item.type === 'ox') {
+    const normalizedCorrect = normalizeForCompare(item.answer);
+    const isO = normalizedCorrect === 'o' || normalizedCorrect.includes('맞');
+    const isX = normalizedCorrect === 'x' || normalizedCorrect.includes('틀');
+    if (isO) return normalizedUser === 'o';
+    if (isX) return normalizedUser === 'x';
+    return normalizedUser === normalizedCorrect;
+  }
+
+  if (item.type === 'mcq') {
+    if (typeof item.correctOptionIndex === 'number' && item.options?.[item.correctOptionIndex]) {
+      return normalizedUser === normalizeForCompare(item.options[item.correctOptionIndex]);
+    }
+    if (item.options?.length) {
+      return item.options.some((option) => normalizeForCompare(option) === normalizedUser && normalizeForCompare(item.answer).includes(normalizedUser));
+    }
+  }
+
+  const normalizedCorrect = normalizeForCompare(item.answer);
+  return normalizedCorrect.includes(normalizedUser) || normalizedUser.includes(normalizedCorrect);
 }
 
 function toTextArray(raw: unknown): string[] {
@@ -168,6 +233,11 @@ export function WorkspaceShell({
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [autoRechargeEnabled, setAutoRechargeEnabled] = useState(false);
   const [workspaceView, setWorkspaceView] = useState<'notes' | 'quiz'>('notes');
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({});
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [wrongNotes, setWrongNotes] = useState<WrongAnswerNote[]>([]);
+  const [retryQuizMode, setRetryQuizMode] = useState(false);
+  const [retryQuizItems, setRetryQuizItems] = useState<QuizItem[]>([]);
 
   const quickPrompts = useMemo(
     () => [
@@ -183,13 +253,14 @@ export function WorkspaceShell({
     () => [
       'PDF 본문과 첨부 자료를 읽는 중...',
       '강의 핵심 개념을 페이지별로 정리하는 중...',
-      '시험 포인트와 중간/기말 대비 퀴즈를 구성하는 중...',
+      '시험 포인트와 퀴즈를 구성하는 중...',
       '미리보기용 필기를 PDF 위에 반영하는 중...',
     ],
     [],
   );
 
   const quizItems = useMemo(() => parseQuizItems(selectedProject?.lastRun?.questionsJson), [selectedProject?.lastRun?.questionsJson]);
+  const activeQuizItems = useMemo(() => (retryQuizMode ? retryQuizItems : quizItems), [quizItems, retryQuizItems, retryQuizMode]);
   const examFocusItems = useMemo(() => toTextArray(selectedProject?.lastRun?.examFocusJson), [selectedProject?.lastRun?.examFocusJson]);
   const graphVisuals = useMemo(() => parseGraphVisuals(selectedProject?.lastRun?.visualsJson), [selectedProject?.lastRun?.visualsJson]);
 
@@ -295,6 +366,14 @@ export function WorkspaceShell({
   useEffect(() => {
     setWorkspaceView('notes');
   }, [selectedProject?.id]);
+
+  useEffect(() => {
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    setWrongNotes([]);
+    setRetryQuizMode(false);
+    setRetryQuizItems([]);
+  }, [selectedProject?.id, selectedProject?.lastRun?.questionsJson]);
 
   useEffect(() => {
     let active = true;
@@ -569,6 +648,47 @@ export function WorkspaceShell({
     }
   }
 
+  function setQuizAnswer(index: number, value: string) {
+    setQuizAnswers((prev) => ({ ...prev, [index]: value }));
+  }
+
+  function submitQuiz() {
+    const wrong: WrongAnswerNote[] = [];
+    activeQuizItems.forEach((item, idx) => {
+      const userAnswer = (quizAnswers[idx] || '').trim();
+      const correct = isQuizAnswerCorrect(item, userAnswer);
+      if (correct) return;
+      wrong.push({
+        question: item.question,
+        type: item.type,
+        userAnswer: userAnswer || '(미입력)',
+        correctAnswer:
+          item.type === 'mcq' && typeof item.correctOptionIndex === 'number' && item.options?.[item.correctOptionIndex]
+            ? item.options[item.correctOptionIndex]
+            : item.answer,
+        hint: item.hint,
+      });
+    });
+
+    setWrongNotes(wrong);
+    setQuizSubmitted(true);
+  }
+
+  function startWrongRetryExam() {
+    const wrongSet = new Set(wrongNotes.map((note) => note.question));
+    setRetryQuizItems(quizItems.filter((item) => wrongSet.has(item.question)));
+    setRetryQuizMode(true);
+    setQuizSubmitted(false);
+    setQuizAnswers({});
+  }
+
+  function resetFullQuiz() {
+    setRetryQuizMode(false);
+    setRetryQuizItems([]);
+    setQuizSubmitted(false);
+    setQuizAnswers({});
+  }
+
   return (
     <div
       className={`workspaceLayout ${sidebarCollapsed ? 'sidebarHidden' : ''} ${sidebarResizing ? 'isResizing' : ''}`}
@@ -779,19 +899,74 @@ export function WorkspaceShell({
               <>
                 <div className="quizHeader">
                   <div className="sectionTitle">시험 대비 퀴즈</div>
+                  {retryQuizMode ? <div className="badge">오답 재시험 모드</div> : null}
                 </div>
 
                 {selectedProject?.lastRun?.summary ? (
                   <div className="quizSummary">{selectedProject.lastRun.summary}</div>
                 ) : null}
 
-                {quizItems.length ? (
+                {activeQuizItems.length ? (
                   <div className="quizList">
-                    {quizItems.map((item, idx) => (
+                    {activeQuizItems.map((item, idx) => (
                       <div key={`${idx}-${item.question}`} className="quizItem">
                         <div className="quizQ">Q{idx + 1}. {item.question}</div>
+                        <div className="quizMeta">
+                          유형: {item.type === 'mcq' ? '4지선다' : item.type === 'ox' ? 'OX' : '단답형'}
+                        </div>
                         <div className="quizHint">힌트: {item.hint || '핵심 키워드 3개를 먼저 적고, 개념 간 차이를 연결해 보세요.'}</div>
-                        <div className="quizA">정답 포인트: {item.answer}</div>
+
+                        {item.type === 'mcq' && item.options?.length ? (
+                          <div className="quizChoiceList">
+                            {item.options.map((option, optionIndex) => {
+                              const selected = (quizAnswers[idx] || '') === option;
+                              return (
+                                <button
+                                  key={`${item.question}-${optionIndex}`}
+                                  type="button"
+                                  className={`quizChoice ${selected ? 'selected' : ''}`}
+                                  onClick={() => setQuizAnswer(idx, option)}
+                                  disabled={quizSubmitted}
+                                >
+                                  {optionIndex + 1}. {option}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : item.type === 'ox' ? (
+                          <div className="quizChoiceList row">
+                            {['O', 'X'].map((option) => {
+                              const selected = (quizAnswers[idx] || '') === option;
+                              return (
+                                <button
+                                  key={`${item.question}-${option}`}
+                                  type="button"
+                                  className={`quizChoice ${selected ? 'selected' : ''}`}
+                                  onClick={() => setQuizAnswer(idx, option)}
+                                  disabled={quizSubmitted}
+                                >
+                                  {option}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <input
+                            className="input quizInput"
+                            value={quizAnswers[idx] || ''}
+                            onChange={(event) => setQuizAnswer(idx, event.target.value)}
+                            disabled={quizSubmitted}
+                            placeholder="정답을 간단히 입력하세요"
+                          />
+                        )}
+
+                        {quizSubmitted ? (
+                          <div className="quizA">
+                            정답: {item.type === 'mcq' && typeof item.correctOptionIndex === 'number' && item.options?.[item.correctOptionIndex]
+                              ? item.options[item.correctOptionIndex]
+                              : item.answer}
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -801,6 +976,45 @@ export function WorkspaceShell({
                     <div className="muted">PDF 업로드 후 생성을 누르면 중요한 부분 중심으로 시험 대비 퀴즈가 만들어집니다.</div>
                   </div>
                 )}
+
+                {activeQuizItems.length ? (
+                  <div className="quizActions">
+                    <button className="button" type="button" onClick={submitQuiz} disabled={quizSubmitted}>
+                      채점하기
+                    </button>
+                    {quizSubmitted && wrongNotes.length ? (
+                      <button className="button secondary" type="button" onClick={startWrongRetryExam}>
+                        오답만 재시험 보기
+                      </button>
+                    ) : null}
+                    {(quizSubmitted || retryQuizMode) ? (
+                      <button className="button secondary" type="button" onClick={resetFullQuiz}>
+                        전체 퀴즈 다시 풀기
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {quizSubmitted ? (
+                  wrongNotes.length ? (
+                    <div className="wrongNoteWrap">
+                      <div className="sectionTitle">오답노트</div>
+                      <div className="muted">틀린 문제 {wrongNotes.length}개를 기반으로 다시 연습할 수 있어요.</div>
+                      <div className="wrongNoteList">
+                        {wrongNotes.map((note, idx) => (
+                          <div key={`${note.question}-${idx}`} className="wrongNoteItem">
+                            <div className="quizQ">문제: {note.question}</div>
+                            <div className="quizMeta">내 답: {note.userAnswer}</div>
+                            <div className="quizMeta">정답: {note.correctAnswer}</div>
+                            {note.hint ? <div className="quizHint">복습 힌트: {note.hint}</div> : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="quizSummary">모든 문제를 맞혔습니다. 훌륭해요.</div>
+                  )
+                ) : null}
               </>
             ) : null}
           </div>

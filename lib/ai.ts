@@ -131,8 +131,9 @@ export async function generateAnnotatedNotes(payload: {
 13) 딥러닝/AI 계열이면 수식이 있더라도 직관, 손실함수 의미, 역전파/학습 흐름, 모델 비교를 학생이 이해하기 쉽게 바꿔라.
 14) 사용자가 메모를 채팅처럼 여러 개 넣었으면 각 메모를 모두 반영하라.
 15) reviewQuestions는 최소 ${LOW_TOKEN_MODE ? '4개' : '8개'} 이상 만들고, 반드시 핵심 개념/비교/적용/함정 포인트 위주로 출제해라.
-16) answer는 1~3문장으로 간결히 작성해라.
-17) hint는 한 줄 힌트로 작성하고, 답을 그대로 반복하지 말아라.
+16) reviewQuestions의 type은 short/ox/mcq만 사용하고, 세 유형이 고르게 섞이게 만들어라.
+17) short: answer는 1~2문장 핵심답. ox: answer는 반드시 O 또는 X 중 하나. mcq: options는 반드시 4개, correctOptionIndex는 0~3.
+18) hint는 한 줄 힌트로 작성하고, 답을 그대로 반복하지 말아라.
 
 입력:
 - 과목: ${payload.subject ?? '미지정'}
@@ -155,7 +156,7 @@ visuals: [
  또는
  {title, kind:'flowchart', caption, flowchart:{nodes:[{id,label}], edges:[{from,to,label?}]}}
 ]
-reviewQuestions: [{question:string, answer:string, hint?:string}]
+reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint?:string, options?:string[], correctOptionIndex?:number}]
 `;
 
   try {
@@ -252,11 +253,21 @@ reviewQuestions: [{question:string, answer:string, hint?:string}]
             items: {
               type: 'object',
               properties: {
+                type: { type: 'string', enum: ['short', 'ox', 'mcq'] },
                 question: { type: 'string' },
                 answer: { type: 'string' },
                 hint: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                options: {
+                  anyOf: [
+                    { type: 'null' },
+                    { type: 'array', items: { type: 'string' } },
+                  ],
+                },
+                correctOptionIndex: {
+                  anyOf: [{ type: 'null' }, { type: 'number' }],
+                },
               },
-              required: ['question', 'answer', 'hint'],
+              required: ['type', 'question', 'answer', 'hint', 'options', 'correctOptionIndex'],
             },
           }
         },

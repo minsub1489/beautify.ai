@@ -71,11 +71,40 @@ function makeExamFocus(pdfText: string, customNotes: string) {
 }
 
 function makeQuestions(examFocus: string[]) {
-  return examFocus.slice(0, 6).map((focus) => ({
-    question: `${focus}를 설명하고 실제 적용 예시를 1개 제시하세요.`,
-    answer: '핵심 정의를 먼저 말하고, 왜 중요한지와 적용 상황을 연결해 설명하면 됩니다.',
-    hint: '정의 → 특징 → 예시 순서로 답하면 안정적입니다.',
-  }));
+  const base = examFocus.slice(0, 8);
+  return base.map((focus, idx) => {
+    if (idx % 3 === 0) {
+      return {
+        type: 'short' as const,
+        question: `${focus}를 한두 문장으로 설명하세요.`,
+        answer: '핵심 정의를 먼저 말하고, 왜 중요한지 간단한 적용 예시를 덧붙이면 좋습니다.',
+        hint: '정의 → 특징 → 예시 순서로 답하면 안정적입니다.',
+      };
+    }
+
+    if (idx % 3 === 1) {
+      return {
+        type: 'ox' as const,
+        question: `${focus}는 시험에서 자주 헷갈리는 개념이다. O/X로 판단하고 이유를 짧게 말하세요.`,
+        answer: 'O',
+        hint: '단정적으로 외우기보다 기준 개념을 먼저 확인해 보세요.',
+      };
+    }
+
+    return {
+      type: 'mcq' as const,
+      question: `${focus}와 가장 관련이 깊은 설명을 고르세요.`,
+      options: [
+        '핵심 개념의 정의와 목적을 정확히 연결한 설명',
+        '개념 이름만 기억하고 맥락은 생략한 설명',
+        '관련 없는 주변 지식 위주의 설명',
+        '근거 없이 결론만 제시한 설명',
+      ],
+      correctOptionIndex: 0,
+      answer: '핵심 개념의 정의와 목적을 정확히 연결한 설명',
+      hint: '정답은 정의와 목적이 함께 맞아야 합니다.',
+    };
+  });
 }
 
 export function generateLocalStudyPack(input: {
