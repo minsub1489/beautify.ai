@@ -66,6 +66,11 @@ type PageNoteItem = {
   notes: string;
 };
 
+type PageEditorItem = {
+  id: string;
+  sourcePage: number;
+};
+
 type WrongAnswerNote = {
   question: string;
   type: QuizItem['type'];
@@ -223,6 +228,17 @@ function getQuizAnswerStatus(item: QuizItem | undefined, userAnswer: string) {
   return isQuizAnswerCorrect(item, userAnswer) ? 'correct' as const : 'wrong' as const;
 }
 
+function createPageEditorItem(sourcePage: number): PageEditorItem {
+  return {
+    id: globalThis.crypto?.randomUUID?.() ?? `${sourcePage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    sourcePage,
+  };
+}
+
+function getPageOrderSignature(items: PageEditorItem[]) {
+  return items.map((item) => item.sourcePage).join(',');
+}
+
 export function WorkspaceShell({
   projects,
   selectedProject,
@@ -271,6 +287,12 @@ export function WorkspaceShell({
   const [quizAutoGenerating, setQuizAutoGenerating] = useState(false);
   const [quizAutoStatus, setQuizAutoStatus] = useState('');
   const [quizAutoTriggeredFor, setQuizAutoTriggeredFor] = useState('');
+  const [pdfPageItems, setPdfPageItems] = useState<PageEditorItem[]>([]);
+  const [pdfPageInitialOrder, setPdfPageInitialOrder] = useState<number[]>([]);
+  const [pdfPageClipboard, setPdfPageClipboard] = useState<number | null>(null);
+  const [pdfPageLoading, setPdfPageLoading] = useState(false);
+  const [pdfPageSaving, setPdfPageSaving] = useState(false);
+  const [pdfPageStatus, setPdfPageStatus] = useState('');
 
   const quickPrompts = useMemo(
     () => [
@@ -300,6 +322,11 @@ export function WorkspaceShell({
   const currentQuizStatus = getQuizAnswerStatus(currentQuizItem, currentQuizAnswer);
   const answeredCount = activeQuizItems.filter((_, idx) => (quizAnswers[idx] || '').trim()).length;
   const remainingCount = Math.max(0, activeQuizItems.length - answeredCount);
+  const currentPdfPageCount = pdfPageItems.length;
+  const pdfPageDirty = useMemo(
+    () => getPageOrderSignature(pdfPageItems) !== pdfPageInitialOrder.join(','),
+    [pdfPageInitialOrder, pdfPageItems],
+  );
   const hasPdfAsset = useMemo(() => Boolean(selectedProject?.assets?.some((asset) => asset.kind === 'pdf')), [selectedProject?.assets]);
   const latestPdfAsset = useMemo(() => {
     if (!selectedProject?.assets?.length) return null;
@@ -400,6 +427,12 @@ export function WorkspaceShell({
     setPdfRemoveStatus('');
     setRegeneratingPage(null);
     setPageRegenerationStatus('');
+    setPdfPageItems([]);
+    setPdfPageInitialOrder([]);
+    setPdfPageClipboard(null);
+    setPdfPageLoading(false);
+    setPdfPageSaving(false);
+    setPdfPageStatus('');
   }, [selectedProject?.id]);
 
   useEffect(() => {
@@ -434,6 +467,65 @@ export function WorkspaceShell({
       setCurrentQuizIndex(activeQuizItems.length - 1);
     }
   }, [activeQuizItems.length, currentQuizIndex]);
+
+  useEffect(() => {
+    let active = true;
+    const assetId = latestPdfAsset?.id;
+
+    if (!assetId) {
+      setPdfPageItems([]);
+      setPdfPageInitialOrder([]);
+      setPdfPageClipboard(null);
+      setPdfPageSaving(false);
+      setPdfPageStatus('');
+      setPdfPageLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    async function loadPdfPages() {
+      setPdfPageLoading(true);
+      setPdfPageClipboard(null);
+      setPdfPageStatus('');
+      try {
+        const response = await fetch(`/api/assets/${assetId}/pages`);
+        const payload = await response.json().catch(() => ({}));
+        if (!active) return;
+
+        if (!response.ok) {
+          setPdfPageItems([]);
+          setPdfPageInitialOrder([]);
+          setPdfPageStatus(typeof payload?.error === 'string' ? payload.error : 'PDF 페이지 정보를 불러오지 못했습니다.');
+          return;
+        }
+
+        const pageCount = Number(payload?.pageCount);
+        if (!Number.isFinite(pageCount) || pageCount <= 0) {
+          setPdfPageItems([]);
+          setPdfPageInitialOrder([]);
+          setPdfPageStatus('PDF 페이지 정보를 읽을 수 없습니다.');
+          return;
+        }
+
+        const nextOrder = Array.from({ length: pageCount }, (_, index) => index + 1);
+        setPdfPageInitialOrder(nextOrder);
+        setPdfPageItems(nextOrder.map((page) => createPageEditorItem(page)));
+      } catch {
+        if (!active) return;
+        setPdfPageItems([]);
+        setPdfPageInitialOrder([]);
+        setPdfPageStatus('PDF 페이지 정보를 불러오는 중 네트워크 오류가 발생했습니다.');
+      } finally {
+        if (active) setPdfPageLoading(false);
+      }
+    }
+
+    void loadPdfPages();
+    return () => {
+      active = false;
+    };
+  }, [latestPdfAsset?.id]);
 
   useEffect(() => {
     let active = true;
@@ -762,6 +854,94 @@ export function WorkspaceShell({
       setTitleErrorTick((prev) => prev + 1);
     } finally {
       setTitleSaving(false);
+    }
+  }
+
+  function movePdfPage(index: number, direction: -1 | 1) {
+    setPdfPageItems((prev) => {
+      const nextIndex = index + direction;
+      if (index < 0 || index >= prev.length || nextIndex < 0 || nextIndex >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(index, 1);
+      next.splice(nextIndex, 0, moved);
+      return next;
+    });
+    setPdfPageStatus('');
+  }
+
+  function copyPdfPage(sourcePage: number) {
+    setPdfPageClipboard(sourcePage);
+    setPdfPageStatus(`원본 ${sourcePage}페이지를 복사했습니다.`);
+  }
+
+  function pastePdfPage(afterIndex: number) {
+    if (!pdfPageClipboard) return;
+
+    setPdfPageItems((prev) => {
+      const next = [...prev];
+      next.splice(afterIndex + 1, 0, createPageEditorItem(pdfPageClipboard));
+      return next;
+    });
+    setPdfPageStatus(`원본 ${pdfPageClipboard}페이지를 붙여넣었습니다.`);
+  }
+
+  function deletePdfPage(index: number) {
+    setPdfPageItems((prev) => {
+      if (prev.length <= 1) {
+        setPdfPageStatus('마지막 1페이지는 남겨둬야 합니다.');
+        return prev;
+      }
+      setPdfPageStatus('');
+      return prev.filter((_, itemIndex) => itemIndex !== index);
+    });
+  }
+
+  function resetPdfPageEdits() {
+    setPdfPageItems(pdfPageInitialOrder.map((page) => createPageEditorItem(page)));
+    setPdfPageStatus('페이지 구성을 원본 순서로 되돌렸습니다.');
+  }
+
+  async function applyPdfPageEdits() {
+    if (!selectedProject?.id || !pdfPageDirty || pdfPageSaving) return;
+
+    const confirmed = window.confirm('페이지 편집을 적용하면 현재 필기, 퀴즈, 번역 결과가 초기화됩니다. 계속할까요?');
+    if (!confirmed) return;
+
+    setPdfPageSaving(true);
+    setPdfPageStatus('편집한 페이지 순서로 새 PDF를 만드는 중...');
+    try {
+      const response = await fetch(`/api/projects/${selectedProject.id}/pdf-pages`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          pageOrder: pdfPageItems.map((item) => item.sourcePage),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setPdfPageStatus(typeof payload?.error === 'string' ? payload.error : 'PDF 페이지 편집을 적용하지 못했습니다.');
+        return;
+      }
+
+      setTranslationMode('original');
+      setTranslatedAssetId('');
+      setTranslationStatus('');
+      setQuizAnswers({});
+      setQuizSubmitted(false);
+      setWrongNotes([]);
+      setRetryQuizMode(false);
+      setRetryQuizItems([]);
+      setCurrentQuizIndex(0);
+      setQuizAutoTriggeredFor('');
+      setQuizAutoStatus('');
+      setPageRegenerationStatus('');
+      setPdfPageStatus('페이지 편집을 적용했습니다. 최신 PDF로 화면을 갱신합니다.');
+      router.refresh();
+    } catch {
+      setPdfPageStatus('PDF 페이지 편집 적용 중 네트워크 오류가 발생했습니다.');
+    } finally {
+      setPdfPageSaving(false);
     }
   }
 
@@ -1225,6 +1405,105 @@ export function WorkspaceShell({
                         </div>
                       ))}
                     </div>
+                  </div>
+                ) : null}
+
+                {latestPdfAsset ? (
+                  <div className="pageEditorPanel">
+                    <div className="pageEditorHeader">
+                      <div>
+                        <div className="sectionTitle">PDF 페이지 편집</div>
+                        <div className="muted">현재 업로드된 원본 PDF를 기준으로 순서 변경, 삭제, 복사, 붙여넣기를 적용합니다.</div>
+                      </div>
+                      <div className="pageEditorCountBadge">총 {currentPdfPageCount}페이지</div>
+                    </div>
+
+                    <div className="pageEditorToolbar">
+                      <div className="muted">
+                        {pdfPageClipboard
+                          ? `복사됨: 원본 ${pdfPageClipboard}페이지`
+                          : '복사한 페이지가 없습니다.'}
+                      </div>
+                      <div className="row">
+                        <button
+                          type="button"
+                          className="button secondary"
+                          onClick={resetPdfPageEdits}
+                          disabled={pdfPageLoading || pdfPageSaving || !pdfPageItems.length || !pdfPageDirty}
+                        >
+                          초기화
+                        </button>
+                        <button
+                          type="button"
+                          className="button"
+                          onClick={() => void applyPdfPageEdits()}
+                          disabled={pdfPageLoading || pdfPageSaving || !pdfPageItems.length || !pdfPageDirty}
+                        >
+                          {pdfPageSaving ? '적용 중...' : '변경 적용'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {pdfPageLoading ? (
+                      <div className="pageEditorEmpty">PDF 페이지를 불러오는 중...</div>
+                    ) : pdfPageItems.length ? (
+                      <div className="pageEditorList">
+                        {pdfPageItems.map((item, index) => (
+                          <div key={item.id} className="pageEditorItem">
+                            <div className="pageEditorItemMain">
+                              <div className="pageEditorTitle">현재 {index + 1}페이지</div>
+                              <div className="pageEditorMeta">원본 {item.sourcePage}페이지</div>
+                            </div>
+                            <div className="pageEditorActions">
+                              <button
+                                type="button"
+                                className="button secondary pageEditorButton"
+                                onClick={() => movePdfPage(index, -1)}
+                                disabled={pdfPageSaving || index === 0}
+                              >
+                                위로
+                              </button>
+                              <button
+                                type="button"
+                                className="button secondary pageEditorButton"
+                                onClick={() => movePdfPage(index, 1)}
+                                disabled={pdfPageSaving || index === pdfPageItems.length - 1}
+                              >
+                                아래로
+                              </button>
+                              <button
+                                type="button"
+                                className="button secondary pageEditorButton"
+                                onClick={() => copyPdfPage(item.sourcePage)}
+                                disabled={pdfPageSaving}
+                              >
+                                복사
+                              </button>
+                              <button
+                                type="button"
+                                className="button secondary pageEditorButton"
+                                onClick={() => pastePdfPage(index)}
+                                disabled={pdfPageSaving || !pdfPageClipboard}
+                              >
+                                붙여넣기 아래
+                              </button>
+                              <button
+                                type="button"
+                                className="button secondary pageEditorButton"
+                                onClick={() => deletePdfPage(index)}
+                                disabled={pdfPageSaving || pdfPageItems.length <= 1}
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="pageEditorEmpty">편집할 PDF 페이지를 찾지 못했습니다.</div>
+                    )}
+
+                    {pdfPageStatus ? <div className="muted">{pdfPageStatus}</div> : null}
                   </div>
                 ) : null}
 

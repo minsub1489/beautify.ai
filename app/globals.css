@@ -154,6 +154,69 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 .pageNoteTop { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .pageNoteTitle { font-weight: 800; color: #be185d; }
 .pageNoteBody { white-space: pre-wrap; line-height: 1.65; color: #2f2742; }
+.pageEditorPanel {
+  border: 1px solid rgba(236,72,153,0.16);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.86) 0%, rgba(255,240,248,0.96) 100%);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pageEditorHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pageEditorCountBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(255,126,182,0.18) 0%, rgba(244,114,182,0.16) 100%);
+  color: #b83280;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid rgba(236,72,153,0.18);
+}
+.pageEditorToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pageEditorList { display: flex; flex-direction: column; gap: 10px; }
+.pageEditorItem {
+  border: 1px solid rgba(236,72,153,0.14);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.84);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pageEditorItemMain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pageEditorTitle { font-weight: 800; color: #be185d; }
+.pageEditorMeta { font-size: 13px; color: #7a4f67; }
+.pageEditorActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pageEditorButton { padding: 9px 12px; border-radius: 12px; }
+.pageEditorEmpty {
+  border: 1px dashed rgba(236,72,153,0.22);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.72);
+  color: #7a4f67;
+  padding: 16px;
+  text-align: center;
+}
 .workspaceStudio { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
 .previewCard { min-height: 620px; position: relative; }
 .previewHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -322,6 +385,8 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   .billingMini { width: 100%; justify-content: space-between; }
   .composerRow { flex-direction: column; align-items: stretch; }
   .composerActions { justify-content: space-between; }
+  .pageEditorToolbar { flex-direction: column; align-items: stretch; }
+  .pageEditorItemMain { align-items: flex-start; }
   .previewFrame { height: 62vh; min-height: 420px; }
   .previewFrameWrap, .previewEmpty, .previewCard, .chatPanel { min-height: auto; }
   .sidebarToggleFixed { top: 12px; left: 12px; }
