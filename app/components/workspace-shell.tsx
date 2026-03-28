@@ -133,6 +133,42 @@ function normalizeForCompare(text: string) {
   return (text || '').toLowerCase().replace(/\s+/g, '').replace(/[.,!?'"`()[\]{}:;/-]/g, '');
 }
 
+function rotateOptions(options: string[], shift: number) {
+  if (!options.length) return options;
+  const n = options.length;
+  const s = ((shift % n) + n) % n;
+  if (s === 0) return [...options];
+  return [...options.slice(s), ...options.slice(0, s)];
+}
+
+function makeVariantQuizItem(item: QuizItem, seed: number): QuizItem {
+  if (item.type === 'mcq' && item.options?.length) {
+    const originalCorrect = typeof item.correctOptionIndex === 'number' ? item.correctOptionIndex : 0;
+    const rotated = rotateOptions(item.options, seed % item.options.length || 1);
+    const correctAnswerText = item.options[originalCorrect] || item.answer;
+    const newCorrectIndex = Math.max(0, rotated.findIndex((option) => option === correctAnswerText));
+    return {
+      ...item,
+      question: `[변형] ${item.question} (같은 개념, 다른 보기 구성)`,
+      options: rotated,
+      correctOptionIndex: newCorrectIndex,
+      answer: correctAnswerText,
+    };
+  }
+
+  if (item.type === 'ox') {
+    return {
+      ...item,
+      question: `[변형] ${item.question} (판단 근거를 한 줄로 덧붙이세요)`,
+    };
+  }
+
+  return {
+    ...item,
+    question: `[변형] ${item.question}를 다른 상황(예시/비교)으로 다시 설명하세요.`,
+  };
+}
+
 function isQuizAnswerCorrect(item: QuizItem, userAnswer: string) {
   const normalizedUser = normalizeForCompare(userAnswer);
   if (!normalizedUser) return false;
@@ -238,6 +274,9 @@ export function WorkspaceShell({
   const [wrongNotes, setWrongNotes] = useState<WrongAnswerNote[]>([]);
   const [retryQuizMode, setRetryQuizMode] = useState(false);
   const [retryQuizItems, setRetryQuizItems] = useState<QuizItem[]>([]);
+  const [quizAutoGenerating, setQuizAutoGenerating] = useState(false);
+  const [quizAutoStatus, setQuizAutoStatus] = useState('');
+  const [quizAutoTriggeredFor, setQuizAutoTriggeredFor] = useState('');
 
   const quickPrompts = useMemo(
     () => [
@@ -263,6 +302,7 @@ export function WorkspaceShell({
   const activeQuizItems = useMemo(() => (retryQuizMode ? retryQuizItems : quizItems), [quizItems, retryQuizItems, retryQuizMode]);
   const examFocusItems = useMemo(() => toTextArray(selectedProject?.lastRun?.examFocusJson), [selectedProject?.lastRun?.examFocusJson]);
   const graphVisuals = useMemo(() => parseGraphVisuals(selectedProject?.lastRun?.visualsJson), [selectedProject?.lastRun?.visualsJson]);
+  const hasPdfAsset = useMemo(() => Boolean(selectedProject?.assets?.some((asset) => asset.kind === 'pdf')), [selectedProject?.assets]);
 
   const basePreviewPdfUrl = useMemo(() => {
     if (!selectedProject) return '';
@@ -373,6 +413,9 @@ export function WorkspaceShell({
     setWrongNotes([]);
     setRetryQuizMode(false);
     setRetryQuizItems([]);
+    setQuizAutoGenerating(false);
+    setQuizAutoStatus('');
+    setQuizAutoTriggeredFor('');
   }, [selectedProject?.id, selectedProject?.lastRun?.questionsJson]);
 
   useEffect(() => {
@@ -676,7 +719,10 @@ export function WorkspaceShell({
 
   function startWrongRetryExam() {
     const wrongSet = new Set(wrongNotes.map((note) => note.question));
-    setRetryQuizItems(quizItems.filter((item) => wrongSet.has(item.question)));
+    const variants = quizItems
+      .filter((item) => wrongSet.has(item.question))
+      .map((item, idx) => makeVariantQuizItem(item, idx + 1));
+    setRetryQuizItems(variants);
     setRetryQuizMode(true);
     setQuizSubmitted(false);
     setQuizAnswers({});
@@ -688,6 +734,68 @@ export function WorkspaceShell({
     setQuizSubmitted(false);
     setQuizAnswers({});
   }
+
+  async function autoGenerateQuiz() {
+    if (!selectedProject?.id || quizAutoGenerating) return;
+    setQuizAutoGenerating(true);
+    setQuizAutoStatus('PDF를 바탕으로 퀴즈를 자동 생성하는 중...');
+    setQuizAutoTriggeredFor(selectedProject.id);
+    try {
+      const formData = new FormData();
+      formData.set('projectId', selectedProject.id);
+      formData.set('redirectTo', `/?projectId=${selectedProject.id}`);
+      formData.set('noteText', '시험 대비 퀴즈를 만들어줘. 단답형/OX/4지선다를 고르게 섞어줘.');
+      formData.set('customNotes', '');
+
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        body: formData,
+        redirect: 'follow',
+      });
+
+      if (response.redirected) {
+        window.location.assign(response.url);
+        return;
+      }
+
+      if (!response.ok) {
+        const raw = await response.text().catch(() => '');
+        let message = '퀴즈 자동 생성 중 오류가 발생했습니다.';
+        if (raw) {
+          try {
+            const payload = JSON.parse(raw) as { error?: unknown };
+            if (typeof payload.error === 'string') message = payload.error;
+          } catch {
+            message = raw.slice(0, 180);
+          }
+        }
+        setQuizAutoStatus(message);
+        return;
+      }
+
+      setQuizAutoStatus('퀴즈 생성이 완료되었습니다.');
+      router.refresh();
+    } catch {
+      setQuizAutoStatus('퀴즈 자동 생성 중 네트워크 오류가 발생했습니다.');
+    } finally {
+      setQuizAutoGenerating(false);
+    }
+  }
+
+  useEffect(() => {
+    if (workspaceView !== 'quiz') return;
+    if (!selectedProject?.id) return;
+    if (!hasPdfAsset) {
+      setQuizAutoStatus('퀴즈를 만들려면 먼저 PDF를 업로드해 주세요.');
+      return;
+    }
+    if (quizItems.length > 0) {
+      setQuizAutoStatus('');
+      return;
+    }
+    if (quizAutoTriggeredFor === selectedProject.id) return;
+    void autoGenerateQuiz();
+  }, [workspaceView, selectedProject?.id, hasPdfAsset, quizItems.length, quizAutoTriggeredFor]);
 
   return (
     <div
@@ -1044,96 +1152,116 @@ export function WorkspaceShell({
                 퀴즈
               </button>
             </div>
+            {workspaceView === 'notes' ? (
+              <>
+                <div className="composerRow">
+                  <textarea
+                    className="textarea composerInput"
+                    name="noteText"
+                    value={noteDraft}
+                    onChange={(e) => setNoteDraft(e.target.value)}
+                    placeholder="예: 교수님이 역전파 유도 과정과 Transformer attention 계산을 중요하다고 했어. 표와 흐름도로 같이 정리해줘"
+                    disabled={isGenerating}
+                  />
+                </div>
 
-            <div className="composerRow">
-              <textarea
-                className="textarea composerInput"
-                name="noteText"
-                value={noteDraft}
-                onChange={(e) => setNoteDraft(e.target.value)}
-                placeholder="예: 교수님이 역전파 유도 과정과 Transformer attention 계산을 중요하다고 했어. 표와 흐름도로 같이 정리해줘"
-                disabled={isGenerating}
-              />
-            </div>
+                <div className="composerActions">
+                  <button
+                    type="button"
+                    className="iconButton clipButton"
+                    onClick={() => attachmentRef.current?.click()}
+                    aria-label="파일 첨부"
+                    title="오디오/텍스트/PDF 첨부"
+                    disabled={isGenerating}
+                  >
+                    <Paperclip size={18} />
+                  </button>
+                  <button className="button" type="submit" disabled={isGenerating}>
+                    {isGenerating ? '생성 중...' : '생성'}
+                  </button>
+                </div>
 
-            <div className="composerActions">
-              <button
-                type="button"
-                className="iconButton clipButton"
-                onClick={() => attachmentRef.current?.click()}
-                aria-label="파일 첨부"
-                title="오디오/텍스트/PDF 첨부"
-                disabled={isGenerating}
-              >
-                <Paperclip size={18} />
-              </button>
-              <button className="button" type="submit" disabled={isGenerating}>
-                {isGenerating ? '생성 중...' : '생성'}
-              </button>
-            </div>
+                <input
+                  ref={attachmentRef}
+                  className="hiddenInput"
+                  type="file"
+                  name="attachments"
+                  multiple
+                  accept="audio/*,text/*,.txt,.md,.csv,.json,.yaml,.yml,.rtf,application/pdf"
+                  onChange={onAttachmentChange}
+                />
 
-            <input
-              ref={attachmentRef}
-              className="hiddenInput"
-              type="file"
-              name="attachments"
-              multiple
-              accept="audio/*,text/*,.txt,.md,.csv,.json,.yaml,.yml,.rtf,application/pdf"
-              onChange={onAttachmentChange}
-            />
-
-            {attachmentNames.length ? (
-              <div className="attachmentList">
-                {attachmentNames.map((name, idx) => (
-                  <div key={`${name}-${idx}`} className="attachmentChip">
-                    <span>{name}</span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            {generationStatus ? <div className="muted">상태: {generationStatus}</div> : null}
-
-            <div className="row">
-              {quickPrompts.map((prompt) => (
-                <button key={prompt} className="chip" type="button" onClick={() => setNoteDraft((prev) => (prev ? `${prev}\n${prompt}` : prompt))} disabled={isGenerating}>
-                  {prompt}
-                </button>
-              ))}
-            </div>
-
-            {(renderedMathFocus.length || graphVisuals.length) ? (
-              <div className="mathTool card">
-                <div className="sectionTitle">AI 수식/그래프 보조</div>
-                {renderedMathFocus.length ? (
-                  <div className="stack">
-                    {renderedMathFocus.map((item, idx) => (
-                      <div key={`${item.raw}-${idx}`} className="mathPreview" dangerouslySetInnerHTML={{ __html: item.html }} />
-                    ))}
-                  </div>
-                ) : null}
-                {graphVisuals.length ? (
-                  <div className="stack">
-                    {graphVisuals.slice(0, 2).map((graph, idx) => (
-                      <div key={`${graph.title}-${idx}`} className="graphCard">
-                        <div className="graphTitle">{graph.title}</div>
-                        {graph.caption ? <div className="muted">{graph.caption}</div> : null}
-                        <div className="muted">
-                          {graph.series[0]?.points
-                            .slice(0, 5)
-                            .map((p) => `(${p.x}, ${p.y})`)
-                            .join(', ')}
-                        </div>
-                        <a className="button secondary" href="https://www.desmos.com/calculator?lang=ko" target="_blank" rel="noreferrer">
-                          <ExternalLink size={16} />
-                          Desmos에서 보기
-                        </a>
+                {attachmentNames.length ? (
+                  <div className="attachmentList">
+                    {attachmentNames.map((name, idx) => (
+                      <div key={`${name}-${idx}`} className="attachmentChip">
+                        <span>{name}</span>
                       </div>
                     ))}
                   </div>
                 ) : null}
+
+                {generationStatus ? <div className="muted">상태: {generationStatus}</div> : null}
+
+                <div className="row">
+                  {quickPrompts.map((prompt) => (
+                    <button key={prompt} className="chip" type="button" onClick={() => setNoteDraft((prev) => (prev ? `${prev}\n${prompt}` : prompt))} disabled={isGenerating}>
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+
+                {(renderedMathFocus.length || graphVisuals.length) ? (
+                  <div className="mathTool card">
+                    <div className="sectionTitle">AI 수식/그래프 보조</div>
+                    {renderedMathFocus.length ? (
+                      <div className="stack">
+                        {renderedMathFocus.map((item, idx) => (
+                          <div key={`${item.raw}-${idx}`} className="mathPreview" dangerouslySetInnerHTML={{ __html: item.html }} />
+                        ))}
+                      </div>
+                    ) : null}
+                    {graphVisuals.length ? (
+                      <div className="stack">
+                        {graphVisuals.slice(0, 2).map((graph, idx) => (
+                          <div key={`${graph.title}-${idx}`} className="graphCard">
+                            <div className="graphTitle">{graph.title}</div>
+                            {graph.caption ? <div className="muted">{graph.caption}</div> : null}
+                            <div className="muted">
+                              {graph.series[0]?.points
+                                .slice(0, 5)
+                                .map((p) => `(${p.x}, ${p.y})`)
+                                .join(', ')}
+                            </div>
+                            <a className="button secondary" href="https://www.desmos.com/calculator?lang=ko" target="_blank" rel="noreferrer">
+                              <ExternalLink size={16} />
+                              Desmos에서 보기
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="quizAutoPanel">
+                <div className="sectionTitle">퀴즈 자동 생성</div>
+                <div className="muted">PDF가 업로드된 상태에서 퀴즈 탭을 열면 자동으로 시험 대비 퀴즈를 생성합니다.</div>
+                {quizAutoStatus ? <div className="muted">상태: {quizAutoStatus}</div> : null}
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={quizAutoGenerating || !selectedProject?.id || !hasPdfAsset}
+                  onClick={() => {
+                    setQuizAutoTriggeredFor('');
+                    void autoGenerateQuiz();
+                  }}
+                >
+                  {quizAutoGenerating ? '퀴즈 생성 중...' : '퀴즈 다시 생성'}
+                </button>
               </div>
-            ) : null}
+            )}
           </form>
         </div>
       </section>
