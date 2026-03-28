@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Languages, Paperclip, Pencil, Plus, UploadCloud } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Paperclip, Pencil, Plus, UploadCloud } from 'lucide-react';
 import { AuthControls } from './auth-controls';
 
 type ProjectItem = {
@@ -642,29 +642,9 @@ export function WorkspaceShell({
                 자동충전
               </label>
             </div>
-            {hasEnglishPassage ? (
-              <button className="button secondary" type="button" onClick={toggleTranslation} disabled={translationLoading}>
-                <Languages size={16} />
-                {translationMode === 'translated' ? '원문 보기' : '번역 보기'}
-              </button>
-            ) : null}
           </div>
         </div>
         {billingStatus ? <div className="muted">{billingStatus}</div> : null}
-
-        {translationMode === 'translated' && hasEnglishPassage ? (
-          <div className="card translationPanel">
-            <div className="sectionTitle">영문 지문 번역</div>
-            {translationLoading ? <div className="muted">번역을 불러오는 중...</div> : null}
-            {translationStatus ? <div className="muted">{translationStatus}</div> : null}
-            {translationLines.map((line, idx) => (
-              <div key={`${line.original}-${idx}`} className="translationLine">
-                <div className="translationOriginal">{line.original}</div>
-                <div className="translationSub">{line.translation}</div>
-              </div>
-            ))}
-          </div>
-        ) : null}
 
         <div className="workspaceStudio">
           <div
@@ -688,7 +668,20 @@ export function WorkspaceShell({
               await handleDrop(e.dataTransfer.files);
             }}
           >
-            <div className="sectionTitle">업로드 자료 미리보기</div>
+            <div className="previewHeader">
+              <div className="sectionTitle">업로드 자료 미리보기</div>
+              {previewPdfUrl ? (
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={toggleTranslation}
+                  disabled={translationLoading}
+                  title={hasEnglishPassage ? '영문 지문 번역' : '영문 지문이 감지될 때 번역이 활성화됩니다'}
+                >
+                  번역
+                </button>
+              ) : null}
+            </div>
             {dragging ? <div className="previewDropOverlay">여기에 PDF를 놓으면 중앙 미리보기에 업로드됩니다</div> : null}
 
             {workspaceView === 'notes' && (isGenerating || liveNotes.length > 0) ? (
@@ -712,6 +705,20 @@ export function WorkspaceShell({
                 <div className="dropZoneTitle">PDF를 드롭하면 여기에 미리보기가 표시됩니다</div>
               </div>
             )}
+
+            {translationMode === 'translated' && hasEnglishPassage ? (
+              <div className="translationPanel">
+                <div className="sectionTitle">영문 지문 번역</div>
+                {translationLoading ? <div className="muted">번역을 불러오는 중...</div> : null}
+                {translationStatus ? <div className="muted">{translationStatus}</div> : null}
+                {translationLines.map((line, idx) => (
+                  <div key={`${line.original}-${idx}`} className="translationLine">
+                    <div className="translationOriginal">{line.original}</div>
+                    <div className="translationSub">{line.translation}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
             {workspaceView === 'quiz' ? (
               <>
