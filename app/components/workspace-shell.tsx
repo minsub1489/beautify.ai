@@ -95,7 +95,6 @@ export function WorkspaceShell({
 }) {
   const router = useRouter();
   const attachmentRef = useRef<HTMLInputElement>(null);
-  const quizPdfRef = useRef<HTMLInputElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [pdfName, setPdfName] = useState('');
@@ -668,119 +667,81 @@ export function WorkspaceShell({
         ) : null}
 
         <div className="workspaceStudio">
-          {workspaceView === 'notes' ? (
-            <div
-              className="card stack previewCard"
-              onDragEnter={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={(e) => {
-                e.preventDefault();
-                if (e.currentTarget === e.target) setDragging(false);
-              }}
-              onDrop={async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setDragging(false);
-                await handleDrop(e.dataTransfer.files);
-              }}
-            >
-              <div className="sectionTitle">업로드 자료 미리보기</div>
-              {dragging ? <div className="previewDropOverlay">여기에 PDF를 놓으면 중앙 미리보기에 업로드됩니다</div> : null}
+          <div
+            className={`card stack previewCard ${workspaceView === 'quiz' ? 'quizCard' : ''}`}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              if (e.currentTarget === e.target) setDragging(false);
+            }}
+            onDrop={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDragging(false);
+              await handleDrop(e.dataTransfer.files);
+            }}
+          >
+            <div className="sectionTitle">업로드 자료 미리보기</div>
+            {dragging ? <div className="previewDropOverlay">여기에 PDF를 놓으면 중앙 미리보기에 업로드됩니다</div> : null}
 
-              {(isGenerating || liveNotes.length > 0) ? (
-                <div className="liveNotePanel">
-                  <div className="label">실시간 필기</div>
-                  {liveNotes.length ? (
-                    liveNotes.map((line, idx) => <div key={`${line}-${idx}`} className="liveNoteLine">{line}</div>)
-                  ) : (
-                    <div className="liveNoteLine">필기 생성을 준비하고 있습니다...</div>
-                  )}
-                </div>
-              ) : null}
-
-              {previewPdfUrl ? (
-                <div className="previewFrameWrap">
-                  <iframe className="previewFrame" src={previewPdfUrl} title="PDF 미리보기" />
-                </div>
-              ) : (
-                <div className="dropZone previewEmpty">
-                  <UploadCloud size={26} />
-                  <div className="dropZoneTitle">PDF를 드롭하면 여기에 미리보기가 표시됩니다</div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div
-              className="card stack previewCard quizCard"
-              onDragEnter={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={(e) => {
-                e.preventDefault();
-                if (e.currentTarget === e.target) setDragging(false);
-              }}
-              onDrop={async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setDragging(false);
-                await handleDrop(e.dataTransfer.files);
-              }}
-            >
-              {dragging ? <div className="previewDropOverlay">여기에 PDF를 놓으면 업로드됩니다</div> : null}
-              <div className="quizHeader">
-                <div className="sectionTitle">시험 대비 퀴즈</div>
-                <button
-                  type="button"
-                  className="button secondary"
-                  onClick={() => quizPdfRef.current?.click()}
-                >
-                  PDF 올리기
-                </button>
-                <input
-                  ref={quizPdfRef}
-                  className="hiddenInput"
-                  type="file"
-                  accept="application/pdf,audio/*"
-                  onChange={async (event) => {
-                    await handleDrop(event.target.files);
-                    event.currentTarget.value = '';
-                  }}
-                />
+            {workspaceView === 'notes' && (isGenerating || liveNotes.length > 0) ? (
+              <div className="liveNotePanel">
+                <div className="label">실시간 필기</div>
+                {liveNotes.length ? (
+                  liveNotes.map((line, idx) => <div key={`${line}-${idx}`} className="liveNoteLine">{line}</div>)
+                ) : (
+                  <div className="liveNoteLine">필기 생성을 준비하고 있습니다...</div>
+                )}
               </div>
+            ) : null}
 
-              {selectedProject?.lastRun?.summary ? (
-                <div className="quizSummary">{selectedProject.lastRun.summary}</div>
-              ) : null}
+            {previewPdfUrl ? (
+              <div className="previewFrameWrap">
+                <iframe className="previewFrame" src={previewPdfUrl} title="PDF 미리보기" />
+              </div>
+            ) : (
+              <div className="dropZone previewEmpty">
+                <UploadCloud size={26} />
+                <div className="dropZoneTitle">PDF를 드롭하면 여기에 미리보기가 표시됩니다</div>
+              </div>
+            )}
 
-              {quizItems.length ? (
-                <div className="quizList">
-                  {quizItems.map((item, idx) => (
-                    <div key={`${idx}-${item.question}`} className="quizItem">
-                      <div className="quizQ">Q{idx + 1}. {item.question}</div>
-                      <div className="quizHint">힌트: {item.hint || '핵심 키워드 3개를 먼저 적고, 개념 간 차이를 연결해 보세요.'}</div>
-                      <div className="quizA">정답 포인트: {item.answer}</div>
-                    </div>
-                  ))}
+            {workspaceView === 'quiz' ? (
+              <>
+                <div className="quizHeader">
+                  <div className="sectionTitle">시험 대비 퀴즈</div>
                 </div>
-              ) : (
-                <div className="dropZone previewEmpty">
-                  <div className="dropZoneTitle">퀴즈가 아직 없습니다</div>
-                  <div className="muted">PDF 업로드 후 생성을 누르면 중요한 부분 중심으로 시험 대비 퀴즈가 만들어집니다.</div>
-                </div>
-              )}
-            </div>
-          )}
+
+                {selectedProject?.lastRun?.summary ? (
+                  <div className="quizSummary">{selectedProject.lastRun.summary}</div>
+                ) : null}
+
+                {quizItems.length ? (
+                  <div className="quizList">
+                    {quizItems.map((item, idx) => (
+                      <div key={`${idx}-${item.question}`} className="quizItem">
+                        <div className="quizQ">Q{idx + 1}. {item.question}</div>
+                        <div className="quizHint">힌트: {item.hint || '핵심 키워드 3개를 먼저 적고, 개념 간 차이를 연결해 보세요.'}</div>
+                        <div className="quizA">정답 포인트: {item.answer}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="dropZone">
+                    <div className="dropZoneTitle">퀴즈가 아직 없습니다</div>
+                    <div className="muted">PDF 업로드 후 생성을 누르면 중요한 부분 중심으로 시험 대비 퀴즈가 만들어집니다.</div>
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
 
           <form className="card stack chatPanel" method="post" encType="multipart/form-data" onSubmit={handleGenerateSubmit}>
             <input type="hidden" name="projectId" value={selectedProject?.id || ''} />
