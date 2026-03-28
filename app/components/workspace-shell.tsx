@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Languages, Paperclip, Pencil, Plus, UploadCloud } from 'lucide-react';
+import katex from 'katex';
+import { ChevronLeft, ChevronRight, ExternalLink, Languages, Paperclip, Pencil, Plus, UploadCloud } from 'lucide-react';
 import { AuthControls } from './auth-controls';
 
 type ProjectItem = {
@@ -33,6 +34,7 @@ type RunSummary = {
   summary?: string | null;
   outputUrl?: string | null;
   examFocusJson?: unknown;
+  visualsJson?: unknown;
   questionsJson?: unknown;
 };
 
@@ -52,6 +54,16 @@ type QuizItem = {
   answer: string;
   hint?: string;
 };
+
+declare global {
+  interface Window {
+    Desmos?: {
+      GraphingCalculator: new (elt: HTMLElement, options?: Record<string, unknown>) => {
+        setExpression: (arg: { id: string; latex: string }) => void;
+      };
+    };
+  }
+}
 
 function sanitizeText(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
@@ -86,6 +98,11 @@ function parseQuizItems(raw: unknown): QuizItem[] {
   return parsed;
 }
 
+function toTextArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v): v is string => typeof v === 'string').map((v) => v.trim()).filter(Boolean);
+}
+
 export function WorkspaceShell({
   projects,
   selectedProject,
@@ -111,6 +128,11 @@ export function WorkspaceShell({
   const [translationLoading, setTranslationLoading] = useState(false);
   const [translationStatus, setTranslationStatus] = useState('');
   const [translatedAssetId, setTranslatedAssetId] = useState('');
+  const [desmosStatus, setDesmosStatus] = useState('');
+  const [latexInput, setLatexInput] = useState(String.raw`\int_0^1 x^2 dx = \frac{1}{3}`);
+  const [desmosExpr, setDesmosExpr] = useState('y=x^2');
+  const desmosRef = useRef<HTMLDivElement>(null);
+  const desmosInitialized = useRef(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [titleSaving, setTitleSaving] = useState(false);
@@ -143,6 +165,7 @@ export function WorkspaceShell({
   );
 
   const quizItems = useMemo(() => parseQuizItems(selectedProject?.lastRun?.questionsJson), [selectedProject?.lastRun?.questionsJson]);
+  const examFocusItems = useMemo(() => toTextArray(selectedProject?.lastRun?.examFocusJson), [selectedProject?.lastRun?.examFocusJson]);
 
   const basePreviewPdfUrl = useMemo(() => {
     if (!selectedProject) return '';
@@ -166,6 +189,17 @@ export function WorkspaceShell({
     }
     return basePreviewPdfUrl;
   }, [basePreviewPdfUrl, translatedAssetId, translationMode]);
+
+  const katexHtml = useMemo(() => {
+    try {
+      return katex.renderToString(latexInput || 'x', {
+        throwOnError: false,
+        displayMode: true,
+      });
+    } catch {
+      return katex.renderToString('x', { throwOnError: false, displayMode: true });
+    }
+  }, [latexInput]);
 
   const SIDEBAR_MIN = 220;
   const SIDEBAR_MAX = 520;
@@ -234,6 +268,58 @@ export function WorkspaceShell({
   useEffect(() => {
     setWorkspaceView('notes');
   }, [selectedProject?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function ensureDesmos() {
+      if (!desmosRef.current) return;
+
+      if (!window.Desmos) {
+        await new Promise<void>((resolve, reject) => {
+          const existing = document.querySelector<HTMLScriptElement>('script[data-desmos="true"]');
+          if (existing) {
+            existing.addEventListener('load', () => resolve(), { once: true });
+            existing.addEventListener('error', () => reject(new Error('desmos_load_failed')), { once: true });
+            return;
+          }
+
+          const script = document.createElement('script');
+          script.src = 'https://www.desmos.com/api/v1.11/calculator.js?apiKey=desmos';
+          script.async = true;
+          script.dataset.desmos = 'true';
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('desmos_load_failed'));
+          document.head.appendChild(script);
+        });
+      }
+
+      if (cancelled || !desmosRef.current || !window.Desmos || desmosInitialized.current) return;
+      const calculator = new window.Desmos.GraphingCalculator(desmosRef.current, {
+        expressions: true,
+        settingsMenu: false,
+      }) as { setExpression: (arg: { id: string; latex: string }) => void };
+
+      calculator.setExpression({ id: 'main', latex: desmosExpr });
+      (desmosRef.current as HTMLDivElement & { __desmosCalc?: typeof calculator }).__desmosCalc = calculator;
+      desmosInitialized.current = true;
+    }
+
+    void ensureDesmos().catch(() => {
+      setDesmosStatus('Desmos 로드에 실패했습니다. 네트워크를 확인해 주세요.');
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const holder = desmosRef.current as (HTMLDivElement & {
+      __desmosCalc?: { setExpression: (arg: { id: string; latex: string }) => void };
+    }) | null;
+    holder?.__desmosCalc?.setExpression({ id: 'main', latex: desmosExpr || 'y=x^2' });
+  }, [desmosExpr]);
 
   useEffect(() => {
     let active = true;
@@ -825,6 +911,40 @@ export function WorkspaceShell({
                   {prompt}
                 </button>
               ))}
+            </div>
+
+            <div className="mathTool card">
+              <div className="sectionTitle">수식/그래프 도구</div>
+              {examFocusItems.length ? (
+                <div className="muted">시험 포인트: {examFocusItems.slice(0, 2).join(' · ')}</div>
+              ) : null}
+              <label className="label">KaTeX 수식(LaTeX)</label>
+              <input
+                className="input"
+                value={latexInput}
+                onChange={(event) => setLatexInput(event.target.value)}
+                placeholder={String.raw`\frac{a+b}{c}, \sum_{i=1}^{n} i`}
+              />
+              <div className="mathPreview" dangerouslySetInnerHTML={{ __html: katexHtml }} />
+
+              <label className="label">Desmos 그래프 식</label>
+              <input
+                className="input"
+                value={desmosExpr}
+                onChange={(event) => setDesmosExpr(event.target.value)}
+                placeholder="y=sin(x), y=x^2+2x+1"
+              />
+              <div ref={desmosRef} className="desmosBoard" />
+              <a
+                className="button secondary"
+                href={`https://www.desmos.com/calculator?lang=ko`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ExternalLink size={16} />
+                Desmos 새창
+              </a>
+              {desmosStatus ? <div className="muted">{desmosStatus}</div> : null}
             </div>
           </form>
         </div>

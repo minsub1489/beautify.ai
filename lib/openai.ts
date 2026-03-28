@@ -7,11 +7,17 @@ type GeminiPart = {
 };
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 export const GEMINI_MODELS = {
   text: process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash-lite',
   reasoning: process.env.GEMINI_REASONING_MODEL || 'gemini-2.0-flash',
   transcription: process.env.GEMINI_TRANSCRIBE_MODEL || 'gemini-2.0-flash',
+} as const;
+
+export const OPENROUTER_MODELS = {
+  text: process.env.OPENROUTER_TEXT_MODEL || 'openai/gpt-4o-mini',
+  reasoning: process.env.OPENROUTER_REASONING_MODEL || 'openai/gpt-4.1-mini',
 } as const;
 
 function getApiKey() {
@@ -30,6 +36,77 @@ function extractCandidateText(payload: any) {
     .filter(Boolean)
     .join('\n')
     .trim();
+}
+
+function extractOpenRouterText(payload: any) {
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content === 'string') return content.trim();
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => (typeof item?.text === 'string' ? item.text : ''))
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  }
+  return '';
+}
+
+function getOpenRouterKey() {
+  const key = process.env.OPENROUTER_API_KEY?.trim();
+  return key || '';
+}
+
+function shouldFallbackToOpenRouter(error: unknown) {
+  const status = typeof error === 'object' && error !== null && 'status' in error
+    ? Number((error as { status?: unknown }).status)
+    : undefined;
+
+  const message = typeof error === 'object' && error !== null && 'message' in error
+    ? String((error as { message?: unknown }).message ?? '')
+    : '';
+
+  return status === 429 || /quota|billing|rate limit|RESOURCE_EXHAUSTED/i.test(message);
+}
+
+async function openRouterGenerate(params: {
+  model: string;
+  prompt: string;
+  temperature?: number;
+}) {
+  const apiKey = getOpenRouterKey();
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY가 비어 있습니다.');
+  }
+
+  const response = await fetch(OPENROUTER_API_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: params.model,
+      temperature: params.temperature ?? 0.2,
+      messages: [{ role: 'user', content: params.prompt }],
+    }),
+  });
+
+  const raw = await response.text();
+  let parsed: any = null;
+  try {
+    parsed = raw ? JSON.parse(raw) : null;
+  } catch {
+    parsed = null;
+  }
+
+  if (!response.ok) {
+    const message = parsed?.error?.message || raw || `OpenRouter API 오류 (status ${response.status})`;
+    throw new Error(message);
+  }
+
+  const text = extractOpenRouterText(parsed);
+  if (!text) throw new Error('OpenRouter 응답 텍스트가 비어 있습니다.');
+  return text;
 }
 
 async function geminiGenerate(params: {
@@ -76,23 +153,37 @@ export async function generateGeminiJson<T>(params: {
   prompt: string;
   schema: unknown;
 }) {
-  const parsed = await geminiGenerate({
-    model: params.model,
-    parts: [{ text: params.prompt }],
-    responseMimeType: 'application/json',
-    responseSchema: params.schema,
-    temperature: 0.1,
-  });
-
-  const text = extractCandidateText(parsed);
-  if (!text) {
-    throw new Error('Gemini 응답에서 JSON 텍스트를 찾지 못했습니다.');
-  }
-
   try {
+    const parsed = await geminiGenerate({
+      model: params.model,
+      parts: [{ text: params.prompt }],
+      responseMimeType: 'application/json',
+      responseSchema: params.schema,
+      temperature: 0.1,
+    });
+
+    const text = extractCandidateText(parsed);
+    if (!text) {
+      throw new Error('Gemini 응답에서 JSON 텍스트를 찾지 못했습니다.');
+    }
+
     return JSON.parse(text) as T;
-  } catch {
-    throw new Error(`Gemini JSON 파싱에 실패했습니다: ${text.slice(0, 240)}`);
+  } catch (error) {
+    if (!shouldFallbackToOpenRouter(error) || !getOpenRouterKey()) {
+      throw error;
+    }
+
+    const fallbackPrompt = `${params.prompt}
+
+반드시 아래 JSON 스키마를 지켜 유효한 JSON만 출력하라:
+${JSON.stringify(params.schema)}
+`;
+    const text = await openRouterGenerate({
+      model: OPENROUTER_MODELS.reasoning,
+      prompt: fallbackPrompt,
+      temperature: 0.1,
+    });
+    return JSON.parse(text) as T;
   }
 }
 
@@ -101,15 +192,32 @@ export async function generateGeminiText(params: {
   parts: GeminiPart[];
   temperature?: number;
 }) {
-  const parsed = await geminiGenerate({
-    model: params.model,
-    parts: params.parts,
-    responseMimeType: 'text/plain',
-    temperature: params.temperature ?? 0.2,
-  });
-  const text = extractCandidateText(parsed);
-  if (!text) throw new Error('Gemini 응답 텍스트가 비어 있습니다.');
-  return text;
+  try {
+    const parsed = await geminiGenerate({
+      model: params.model,
+      parts: params.parts,
+      responseMimeType: 'text/plain',
+      temperature: params.temperature ?? 0.2,
+    });
+    const text = extractCandidateText(parsed);
+    if (!text) throw new Error('Gemini 응답 텍스트가 비어 있습니다.');
+    return text;
+  } catch (error) {
+    if (!shouldFallbackToOpenRouter(error) || !getOpenRouterKey()) {
+      throw error;
+    }
+
+    const mergedPrompt = params.parts
+      .map((part) => part.text || '')
+      .filter(Boolean)
+      .join('\n');
+
+    return openRouterGenerate({
+      model: OPENROUTER_MODELS.text,
+      prompt: mergedPrompt,
+      temperature: params.temperature ?? 0.2,
+    });
+  }
 }
 
 export function toUserFacingGeminiError(error: unknown) {
