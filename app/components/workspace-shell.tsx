@@ -298,7 +298,7 @@ export function WorkspaceShell({
   const [pdfPageSaving, setPdfPageSaving] = useState(false);
   const [pdfPageStatus, setPdfPageStatus] = useState('');
   const [draggingPdfPageId, setDraggingPdfPageId] = useState('');
-  const [dragOverPdfPageId, setDragOverPdfPageId] = useState('');
+  const [dragOverPdfInsertIndex, setDragOverPdfInsertIndex] = useState<number | null>(null);
 
   const quickPrompts = useMemo(
     () => [
@@ -474,7 +474,7 @@ export function WorkspaceShell({
     setPdfPageSaving(false);
     setPdfPageStatus('');
     setDraggingPdfPageId('');
-    setDragOverPdfPageId('');
+    setDragOverPdfInsertIndex(null);
     pdfEditAutoScrollSpeedRef.current = 0;
     if (pdfEditAutoScrollFrameRef.current !== null) {
       cancelAnimationFrame(pdfEditAutoScrollFrameRef.current);
@@ -536,7 +536,7 @@ export function WorkspaceShell({
       setPdfPageStatus('');
       setPdfPageLoading(false);
       setDraggingPdfPageId('');
-      setDragOverPdfPageId('');
+      setDragOverPdfInsertIndex(null);
       return () => {
         active = false;
       };
@@ -546,7 +546,7 @@ export function WorkspaceShell({
       setPdfPageLoading(true);
       setPdfPageStatus('');
       setDraggingPdfPageId('');
-      setDragOverPdfPageId('');
+      setDragOverPdfInsertIndex(null);
       try {
         const response = await fetch(`/api/assets/${assetId}/pages`);
         const payload = await response.json().catch(() => ({}));
@@ -961,9 +961,29 @@ export function WorkspaceShell({
     setPdfPageStatus('페이지 순서를 바꿨습니다. 변경 적용을 누르면 새 PDF에 반영됩니다.');
   }
 
+  function movePdfPageToIndex(sourceId: string, targetIndex: number) {
+    if (!sourceId) return;
+
+    setPdfPageItems((prev) => {
+      const sourceIndex = prev.findIndex((item) => item.id === sourceId);
+      if (sourceIndex < 0) return prev;
+
+      const boundedTargetIndex = Math.max(0, Math.min(targetIndex, prev.length));
+      const next = [...prev];
+      const [moved] = next.splice(sourceIndex, 1);
+      const adjustedTargetIndex = sourceIndex < boundedTargetIndex ? boundedTargetIndex - 1 : boundedTargetIndex;
+
+      if (sourceIndex === adjustedTargetIndex) return prev;
+
+      next.splice(adjustedTargetIndex, 0, moved);
+      return next;
+    });
+    setPdfPageStatus('페이지 순서를 바꿨습니다. 변경 적용을 누르면 새 PDF에 반영됩니다.');
+  }
+
   function resetPdfDragState() {
     setDraggingPdfPageId('');
-    setDragOverPdfPageId('');
+    setDragOverPdfInsertIndex(null);
     stopPdfEditAutoScroll();
   }
 
@@ -1022,6 +1042,10 @@ export function WorkspaceShell({
     if (pdfEditAutoScrollFrameRef.current === null) {
       pdfEditAutoScrollFrameRef.current = window.requestAnimationFrame(runPdfEditAutoScroll);
     }
+  }
+
+  function shouldIgnorePdfCardDrag(target: EventTarget | null) {
+    return target instanceof HTMLElement && Boolean(target.closest('button'));
   }
 
   function resetPdfPageEdits() {
@@ -1478,59 +1502,85 @@ export function WorkspaceShell({
                       {pdfPageItems.map((item, index) => (
                         <div
                           key={item.id}
-                          className={`previewEditCard ${draggingPdfPageId === item.id ? 'dragging' : ''} ${dragOverPdfPageId === item.id ? 'dragOver' : ''}`}
-                          draggable={!pdfPageSaving}
-                          onDragStart={(event) => {
-                            event.dataTransfer.effectAllowed = 'move';
-                            event.dataTransfer.setData('text/plain', item.id);
-                            setDraggingPdfPageId(item.id);
-                            setDragOverPdfPageId(item.id);
-                          }}
+                          className={`previewEditCell ${dragOverPdfInsertIndex === index ? 'dropTarget' : ''}`}
                           onDragOver={(event) => {
                             event.preventDefault();
                             updatePdfEditAutoScroll(event.clientY);
-                            if (draggingPdfPageId && draggingPdfPageId !== item.id) {
-                              setDragOverPdfPageId(item.id);
+                            if (draggingPdfPageId) {
+                              setDragOverPdfInsertIndex(index);
                             }
-                          }}
-                          onDragLeave={() => {
-                            if (dragOverPdfPageId === item.id) setDragOverPdfPageId('');
                           }}
                           onDrop={(event) => {
                             event.preventDefault();
                             const sourceId = event.dataTransfer.getData('text/plain') || draggingPdfPageId;
-                            movePdfPageById(sourceId, item.id);
+                            movePdfPageToIndex(sourceId, index);
                             resetPdfDragState();
                           }}
-                          onDragEnd={resetPdfDragState}
                         >
-                          <div className="previewEditCardViewport">
-                            <iframe
-                              className="previewEditCardFrame"
-                              src={buildPdfPagePreviewUrl(item.sourcePage)}
-                              title={`PDF ${item.sourcePage}페이지 미리보기`}
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            className="pageEditorRemove previewEditCardRemove"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              deletePdfPageById(item.id);
+                          {dragOverPdfInsertIndex === index ? <div className="previewEditInsertMarker" aria-hidden="true" /> : null}
+                          <div
+                            className={`previewEditCard ${draggingPdfPageId === item.id ? 'dragging' : ''}`}
+                            draggable={!pdfPageSaving}
+                            onDragStart={(event) => {
+                              if (shouldIgnorePdfCardDrag(event.target)) {
+                                event.preventDefault();
+                                return;
+                              }
+                              event.dataTransfer.effectAllowed = 'move';
+                              event.dataTransfer.setData('text/plain', item.id);
+                              setDraggingPdfPageId(item.id);
+                              setDragOverPdfInsertIndex(index);
                             }}
-                            disabled={pdfPageSaving || pdfPageItems.length <= 1}
-                            aria-label={`${index + 1}페이지 제거`}
-                            title="페이지 제거"
+                            onDragEnd={resetPdfDragState}
                           >
-                            <X size={14} />
-                          </button>
-                          <div className="previewEditCardOrder">{index + 1}</div>
-                          <div className="previewEditCardMeta">
-                            <div className="previewEditCardTitle">현재 {index + 1}페이지</div>
-                            <div className="previewEditCardSource">원본 {item.sourcePage}페이지</div>
+                            <div className="previewEditCardViewport">
+                              <iframe
+                                className="previewEditCardFrame"
+                                src={buildPdfPagePreviewUrl(item.sourcePage)}
+                                title={`PDF ${item.sourcePage}페이지 미리보기`}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              className="pageEditorRemove previewEditCardRemove"
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                deletePdfPageById(item.id);
+                              }}
+                              disabled={pdfPageSaving || pdfPageItems.length <= 1}
+                              draggable={false}
+                              aria-label={`${index + 1}페이지 제거`}
+                              title="페이지 제거"
+                            >
+                              <X size={14} />
+                            </button>
+                            <div className="previewEditCardOrder">{index + 1}</div>
+                            <div className="previewEditCardMeta">
+                              <div className="previewEditCardTitle">현재 {index + 1}페이지</div>
+                              <div className="previewEditCardSource">원본 {item.sourcePage}페이지</div>
+                            </div>
                           </div>
                         </div>
                       ))}
+                      <div
+                        className={`previewEditTailDrop ${dragOverPdfInsertIndex === pdfPageItems.length ? 'dropTarget' : ''}`}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          updatePdfEditAutoScroll(event.clientY);
+                          if (draggingPdfPageId) {
+                            setDragOverPdfInsertIndex(pdfPageItems.length);
+                          }
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          const sourceId = event.dataTransfer.getData('text/plain') || draggingPdfPageId;
+                          movePdfPageToIndex(sourceId, pdfPageItems.length);
+                          resetPdfDragState();
+                        }}
+                      >
+                        {dragOverPdfInsertIndex === pdfPageItems.length ? <div className="previewEditInsertMarker" aria-hidden="true" /> : null}
+                      </div>
                     </div>
                   ) : (
                     <div className="pageEditorEmpty previewEditEmpty">편집할 PDF 페이지를 찾지 못했습니다.</div>

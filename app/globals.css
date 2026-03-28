@@ -245,8 +245,27 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 .previewEditGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 14px;
+  gap: 0;
   align-items: start;
+}
+.previewEditCell,
+.previewEditTailDrop {
+  position: relative;
+  padding: 10px;
+}
+.previewEditCell.dropTarget,
+.previewEditTailDrop.dropTarget {
+  z-index: 1;
+}
+.previewEditInsertMarker {
+  position: absolute;
+  top: 3px;
+  left: 10px;
+  right: 10px;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ec4899 0%, #f472b6 100%);
+  box-shadow: 0 0 0 4px rgba(244, 114, 182, 0.16);
 }
 .previewEditCard {
   position: relative;
@@ -258,6 +277,7 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,244,249,0.98) 100%);
   box-shadow: 0 12px 28px rgba(236, 72, 153, 0.08);
   cursor: grab;
+  user-select: none;
   transition:
     transform 180ms ease,
     box-shadow 180ms ease,
@@ -275,6 +295,13 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 .previewEditCard.dragOver {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+.previewEditTailDrop {
+  min-height: 48px;
+  border-radius: 18px;
+}
+.previewEditTailDrop.dropTarget {
+  background: rgba(244, 114, 182, 0.08);
 }
 .previewEditCardViewport {
   position: absolute;
@@ -1213,9 +1240,18 @@ pre {
   box-shadow: 0 18px 34px rgba(2, 6, 23, 0.34);
 }
 
+[data-theme='dark'] .previewEditInsertMarker {
+  background: linear-gradient(90deg, #f472b6 0%, #fb7185 100%);
+  box-shadow: 0 0 0 4px rgba(244, 114, 182, 0.18);
+}
+
 [data-theme='dark'] .previewEditCard.dragOver {
   border-color: #7aa2ff;
   box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.16);
+}
+
+[data-theme='dark'] .previewEditTailDrop.dropTarget {
+  background: rgba(244, 114, 182, 0.1);
 }
 
 [data-theme='dark'] .previewEditCardFrame {
