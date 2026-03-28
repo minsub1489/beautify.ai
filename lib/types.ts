@@ -29,6 +29,7 @@ export type QuizQuestion = {
   question: string;
   answer: string;
   hint?: string;
+  source?: string;
   options?: string[];
   correctOptionIndex?: number;
 };

@@ -72,37 +72,46 @@ function makeExamFocus(pdfText: string, customNotes: string) {
 
 function makeQuestions(examFocus: string[]) {
   const base = examFocus.slice(0, 8);
+  const snippets = base.map((line) => cleanText(line).slice(0, 90));
   return base.map((focus, idx) => {
+    const source = snippets[idx] || cleanText(focus).slice(0, 90);
+
     if (idx % 3 === 0) {
       return {
         type: 'short' as const,
-        question: `${focus}를 한두 문장으로 설명하세요.`,
-        answer: '핵심 정의를 먼저 말하고, 왜 중요한지 간단한 적용 예시를 덧붙이면 좋습니다.',
-        hint: '정의 → 특징 → 예시 순서로 답하면 안정적입니다.',
+        question: `다음 자료 내용을 바탕으로 핵심 개념을 한국어로 설명하세요: "${source}"`,
+        answer: '자료 문장에서 말하는 핵심 개념의 정의와 의미를 1~2문장으로 정리하면 됩니다.',
+        hint: '문장 속 핵심 용어를 먼저 찾고, 그 용어의 역할을 설명하세요.',
+        source,
       };
     }
 
     if (idx % 3 === 1) {
       return {
         type: 'ox' as const,
-        question: `${focus}는 시험에서 자주 헷갈리는 개념이다. O/X로 판단하고 이유를 짧게 말하세요.`,
+        question: `다음 진술이 자료 내용과 일치하면 O, 아니면 X를 고르세요: "${source}"`,
         answer: 'O',
-        hint: '단정적으로 외우기보다 기준 개념을 먼저 확인해 보세요.',
+        hint: '원문에서 같은 표현 또는 같은 의미가 있는지 확인해 보세요.',
+        source,
       };
     }
 
+    const distractorA = snippets[(idx + 1) % Math.max(1, snippets.length)] || '주요 개념과 직접 관련 없는 설명';
+    const distractorB = snippets[(idx + 2) % Math.max(1, snippets.length)] || '자료 범위를 벗어난 일반 상식 설명';
+
     return {
       type: 'mcq' as const,
-      question: `${focus}와 가장 관련이 깊은 설명을 고르세요.`,
+      question: `다음 자료 문장과 가장 잘 맞는 해석을 고르세요: "${source}"`,
       options: [
-        '핵심 개념의 정의와 목적을 정확히 연결한 설명',
-        '개념 이름만 기억하고 맥락은 생략한 설명',
-        '관련 없는 주변 지식 위주의 설명',
-        '근거 없이 결론만 제시한 설명',
+        '자료 문장의 핵심 개념/원리를 정확히 설명한 해석',
+        `자료와 직접 관련 없는 진술: ${distractorA}`,
+        `자료의 핵심을 벗어난 진술: ${distractorB}`,
+        '근거 없이 결론만 단정한 해석',
       ],
       correctOptionIndex: 0,
-      answer: '핵심 개념의 정의와 목적을 정확히 연결한 설명',
-      hint: '정답은 정의와 목적이 함께 맞아야 합니다.',
+      answer: '자료 문장의 핵심 개념/원리를 정확히 설명한 해석',
+      hint: '자료 문장에서 무엇을 설명하는지(정의/원리/과정)부터 구분하세요.',
+      source,
     };
   });
 }

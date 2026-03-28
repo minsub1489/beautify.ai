@@ -133,7 +133,10 @@ export async function generateAnnotatedNotes(payload: {
 15) reviewQuestions는 최소 ${LOW_TOKEN_MODE ? '4개' : '8개'} 이상 만들고, 반드시 핵심 개념/비교/적용/함정 포인트 위주로 출제해라.
 16) reviewQuestions의 type은 short/ox/mcq만 사용하고, 세 유형이 고르게 섞이게 만들어라.
 17) short: answer는 1~2문장 핵심답. ox: answer는 반드시 O 또는 X 중 하나. mcq: options는 반드시 4개, correctOptionIndex는 0~3.
-18) hint는 한 줄 힌트로 작성하고, 답을 그대로 반복하지 말아라.
+18) 모든 quiz question/answer/hint/options/source는 반드시 한국어로 작성해라.
+19) 각 문제마다 source에 PDF 본문에서 실제로 확인되는 출제 근거 문구(짧은 발췌)를 넣어라.
+20) source와 무관한 일반론/상식형 문제는 금지한다.
+21) hint는 한 줄 힌트로 작성하고, 답을 그대로 반복하지 말아라.
 
 입력:
 - 과목: ${payload.subject ?? '미지정'}
@@ -156,7 +159,7 @@ visuals: [
  또는
  {title, kind:'flowchart', caption, flowchart:{nodes:[{id,label}], edges:[{from,to,label?}]}}
 ]
-reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint?:string, options?:string[], correctOptionIndex?:number}]
+reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint?:string, source:string, options?:string[], correctOptionIndex?:number}]
 `;
 
   try {
@@ -257,6 +260,7 @@ reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint
                 question: { type: 'string' },
                 answer: { type: 'string' },
                 hint: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                source: { type: 'string' },
                 options: {
                   anyOf: [
                     { type: 'null' },
@@ -267,7 +271,7 @@ reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint
                   anyOf: [{ type: 'null' }, { type: 'number' }],
                 },
               },
-              required: ['type', 'question', 'answer', 'hint', 'options', 'correctOptionIndex'],
+              required: ['type', 'question', 'answer', 'hint', 'source', 'options', 'correctOptionIndex'],
             },
           }
         },

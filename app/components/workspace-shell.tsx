@@ -56,6 +56,7 @@ type QuizItem = {
   question: string;
   answer: string;
   hint?: string;
+  source?: string;
   options?: string[];
   correctOptionIndex?: number;
 };
@@ -102,6 +103,7 @@ function parseQuizItems(raw: unknown): QuizItem[] {
       const question = sanitizeText(record.question);
       const answer = sanitizeText(record.answer, '정답 요약이 제공되지 않았습니다.');
       const hint = sanitizeText(record.hint);
+      const source = sanitizeText(record.source);
       const options = Array.isArray(record.options)
         ? record.options.filter((value): value is string => typeof value === 'string').map((value) => value.trim()).filter(Boolean)
         : [];
@@ -123,6 +125,7 @@ function parseQuizItems(raw: unknown): QuizItem[] {
         question,
         answer,
         hint: hint || undefined,
+        source: source || undefined,
         options: options.length ? options.slice(0, 4) : undefined,
         correctOptionIndex: correctOptionIndex >= 0 && correctOptionIndex <= 3 ? correctOptionIndex : undefined,
       };
@@ -305,6 +308,16 @@ export function WorkspaceShell({
   const examFocusItems = useMemo(() => toTextArray(selectedProject?.lastRun?.examFocusJson), [selectedProject?.lastRun?.examFocusJson]);
   const graphVisuals = useMemo(() => parseGraphVisuals(selectedProject?.lastRun?.visualsJson), [selectedProject?.lastRun?.visualsJson]);
   const hasPdfAsset = useMemo(() => Boolean(selectedProject?.assets?.some((asset) => asset.kind === 'pdf')), [selectedProject?.assets]);
+  const latestPdfCreatedAt = useMemo(() => {
+    if (!selectedProject?.assets?.length) return 0;
+    return selectedProject.assets
+      .filter((asset) => asset.kind === 'pdf')
+      .reduce((latest, asset) => Math.max(latest, new Date(asset.createdAt || 0).getTime()), 0);
+  }, [selectedProject?.assets]);
+  const latestRunCreatedAt = useMemo(
+    () => (selectedProject?.lastRun?.createdAt ? new Date(selectedProject.lastRun.createdAt).getTime() : 0),
+    [selectedProject?.lastRun?.createdAt],
+  );
 
   const basePreviewPdfUrl = useMemo(() => {
     if (!selectedProject) return '';
@@ -739,14 +752,18 @@ export function WorkspaceShell({
 
   async function autoGenerateQuiz() {
     if (!selectedProject?.id || quizAutoGenerating) return;
+    const triggerKey = `${selectedProject.id}:${latestPdfCreatedAt || 'no-pdf'}`;
     setQuizAutoGenerating(true);
     setQuizAutoStatus('PDF를 바탕으로 퀴즈를 자동 생성하는 중...');
-    setQuizAutoTriggeredFor(selectedProject.id);
+    setQuizAutoTriggeredFor(triggerKey);
     try {
       const formData = new FormData();
       formData.set('projectId', selectedProject.id);
       formData.set('redirectTo', `/?projectId=${selectedProject.id}`);
-      formData.set('noteText', '시험 대비 퀴즈를 만들어줘. 단답형/OX/4지선다를 고르게 섞어줘.');
+      formData.set(
+        'noteText',
+        '최신 PDF 본문을 실제로 분석해서 한국어 시험 대비 퀴즈를 만들어줘. 각 문제는 자료 근거(source)가 보여야 하고, 단답형/OX/4지선다를 섞어줘.',
+      );
       formData.set('customNotes', '');
 
       const response = await fetch('/api/generate', {
@@ -791,13 +808,19 @@ export function WorkspaceShell({
       setQuizAutoStatus('퀴즈를 만들려면 먼저 PDF를 업로드해 주세요.');
       return;
     }
-    if (quizItems.length > 0) {
+    const needsRegeneration =
+      quizItems.length === 0 ||
+      !latestRunCreatedAt ||
+      (latestPdfCreatedAt > 0 && latestPdfCreatedAt > latestRunCreatedAt);
+
+    if (!needsRegeneration) {
       setQuizAutoStatus('');
       return;
     }
-    if (quizAutoTriggeredFor === selectedProject.id) return;
+    const triggerKey = `${selectedProject.id}:${latestPdfCreatedAt || 'no-pdf'}`;
+    if (quizAutoTriggeredFor === triggerKey) return;
     void autoGenerateQuiz();
-  }, [workspaceView, selectedProject?.id, hasPdfAsset, quizItems.length, quizAutoTriggeredFor]);
+  }, [workspaceView, selectedProject?.id, hasPdfAsset, quizItems.length, latestPdfCreatedAt, latestRunCreatedAt, quizAutoTriggeredFor]);
 
   return (
     <div
@@ -1039,6 +1062,7 @@ export function WorkspaceShell({
                         <div className="quizMeta">
                           유형: {item.type === 'mcq' ? '4지선다' : item.type === 'ox' ? 'OX' : '단답형'}
                         </div>
+                        {item.source ? <div className="quizMeta">출제 근거: {item.source}</div> : null}
                         <div className="quizHint">힌트: {item.hint || '핵심 키워드 3개를 먼저 적고, 개념 간 차이를 연결해 보세요.'}</div>
 
                         {item.type === 'mcq' && item.options?.length ? (
@@ -1098,7 +1122,7 @@ export function WorkspaceShell({
                 ) : (
                   <div className="dropZone">
                     <div className="dropZoneTitle">퀴즈가 아직 없습니다</div>
-                    <div className="muted">PDF 업로드 후 생성을 누르면 중요한 부분 중심으로 시험 대비 퀴즈가 만들어집니다.</div>
+                    <div className="muted">PDF 업로드 후 퀴즈 탭을 열면, PDF 분석 기반의 한국어 시험 대비 퀴즈가 자동 생성됩니다.</div>
                   </div>
                 )}
 
