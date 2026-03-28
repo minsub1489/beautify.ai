@@ -370,6 +370,10 @@ export function WorkspaceShell({
     }
     return basePreviewPdfUrl;
   }, [basePreviewPdfUrl, translatedAssetId, translationMode]);
+  const buildPdfPagePreviewUrl = (page: number) => {
+    if (!latestPdfAsset?.id) return '';
+    return `/api/assets/${latestPdfAsset.id}/page-preview?page=${page}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`;
+  };
   const pdfEditPreviewLabel = useMemo(() => {
     if (pdfPageLoading) return 'PDF 페이지를 불러오는 중...';
     if (!pdfPageItems.length) return '편집할 페이지가 없습니다.';
@@ -1410,10 +1414,9 @@ export function WorkspaceShell({
                           <div className="previewEditCardViewport">
                             <iframe
                               className="previewEditCardFrame"
-                              src={`${previewPdfUrl}#page=${item.sourcePage}&view=FitH`}
+                              src={buildPdfPagePreviewUrl(item.sourcePage)}
                               title={`PDF ${item.sourcePage}페이지 미리보기`}
                             />
-                            <div className="previewEditCardOverlay" />
                           </div>
                           <button
                             type="button"
@@ -1433,7 +1436,6 @@ export function WorkspaceShell({
                             <div className="previewEditCardTitle">현재 {index + 1}페이지</div>
                             <div className="previewEditCardSource">원본 {item.sourcePage}페이지</div>
                           </div>
-                          <div className="previewEditCardHint">여기를 잡고 드래그</div>
                         </div>
                       ))}
                     </div>
