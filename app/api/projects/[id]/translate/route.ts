@@ -16,7 +16,7 @@ function pickSentences(text: string) {
     .slice(0, 8);
 }
 
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const latestPdf = await prisma.asset.findFirst({
     where: { projectId: id, kind: 'pdf' },
@@ -37,11 +37,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ detected: true, lines: [] }, { status: 200 });
   }
 
-  const headerKey = req.headers.get('x-deepl-api-key')?.trim() || '';
-  const apiKey = headerKey || process.env.DEEPL_API_KEY || '';
+  const apiKey = process.env.DEEPL_API_KEY || '';
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'DeepL API 키가 없습니다. 미리보기 카드에서 키를 입력해 주세요.' },
+      { error: 'DeepL API 키가 없습니다. .env의 DEEPL_API_KEY를 설정해 주세요.' },
       { status: 400 },
     );
   }

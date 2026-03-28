@@ -53,8 +53,6 @@ type QuizItem = {
   hint?: string;
 };
 
-const DEEPL_KEY_STORAGE = 'deepl_free_api_key';
-
 function sanitizeText(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
 }
@@ -113,8 +111,6 @@ export function WorkspaceShell({
   const [translationLines, setTranslationLines] = useState<{ original: string; translation: string }[]>([]);
   const [translationLoading, setTranslationLoading] = useState(false);
   const [translationStatus, setTranslationStatus] = useState('');
-  const [deeplApiKey, setDeeplApiKey] = useState('');
-  const [deeplApiKeyDraft, setDeeplApiKeyDraft] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [titleSaving, setTitleSaving] = useState(false);
@@ -227,14 +223,6 @@ export function WorkspaceShell({
     setTranslationLoading(false);
     setTranslationStatus('');
   }, [selectedProject?.id]);
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(DEEPL_KEY_STORAGE) || '';
-      setDeeplApiKey(saved);
-      setDeeplApiKeyDraft(saved);
-    } catch {}
-  }, []);
 
   useEffect(() => {
     setEditingTitle(false);
@@ -463,10 +451,7 @@ export function WorkspaceShell({
     setTranslationLoading(true);
     setTranslationStatus('');
     try {
-      const response = await fetch(`/api/projects/${selectedProject.id}/translate`, {
-        method: 'GET',
-        headers: deeplApiKey ? { 'x-deepl-api-key': deeplApiKey } : undefined,
-      });
+      const response = await fetch(`/api/projects/${selectedProject.id}/translate`, { method: 'GET' });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         setTranslationStatus(typeof payload?.error === 'string' ? payload.error : '번역을 불러오지 못했습니다.');
@@ -485,19 +470,6 @@ export function WorkspaceShell({
     } finally {
       setTranslationLoading(false);
     }
-  }
-
-  function saveDeeplApiKey() {
-    const cleaned = deeplApiKeyDraft.trim();
-    try {
-      if (!cleaned) {
-        window.localStorage.removeItem(DEEPL_KEY_STORAGE);
-      } else {
-        window.localStorage.setItem(DEEPL_KEY_STORAGE, cleaned);
-      }
-    } catch {}
-    setDeeplApiKey(cleaned);
-    setTranslationStatus(cleaned ? 'DeepL API 키를 저장했습니다.' : '저장된 DeepL API 키를 삭제했습니다.');
   }
 
   async function saveProjectTitle() {
@@ -711,21 +683,6 @@ export function WorkspaceShell({
                 </button>
               ) : null}
             </div>
-            {previewPdfUrl ? (
-              <div className="translationKeyRow">
-                <input
-                  className="input translationKeyInput"
-                  type="password"
-                  value={deeplApiKeyDraft}
-                  onChange={(event) => setDeeplApiKeyDraft(event.target.value)}
-                  placeholder="DeepL Free API Key 입력 (예: ...:fx)"
-                  autoComplete="off"
-                />
-                <button className="button secondary" type="button" onClick={saveDeeplApiKey}>
-                  키 저장
-                </button>
-              </div>
-            ) : null}
             {dragging ? <div className="previewDropOverlay">여기에 PDF를 놓으면 중앙 미리보기에 업로드됩니다</div> : null}
 
             {workspaceView === 'notes' && (isGenerating || liveNotes.length > 0) ? (
