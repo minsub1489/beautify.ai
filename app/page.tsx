@@ -58,6 +58,7 @@ export default async function HomePage({
                   kind: asset.kind,
                   originalName: asset.originalName,
                   publicUrl: asset.publicUrl,
+                  createdAt: asset.createdAt.toISOString(),
                 })),
                 lastRun: selected.runs[0]
                   ? {
@@ -66,6 +67,7 @@ export default async function HomePage({
                       examFocusJson: selected.runs[0].examFocusJson,
                       visualsJson: selected.runs[0].visualsJson,
                       questionsJson: selected.runs[0].questionsJson,
+                      createdAt: selected.runs[0].createdAt.toISOString(),
                     }
                   : null,
               }

@@ -28,6 +28,7 @@ type AssetItem = {
   kind: string;
   originalName: string;
   publicUrl: string;
+  createdAt?: string;
 };
 
 type RunSummary = {
@@ -36,6 +37,7 @@ type RunSummary = {
   examFocusJson?: unknown;
   visualsJson?: unknown;
   questionsJson?: unknown;
+  createdAt?: string;
 };
 
 type SelectedProject = {
@@ -277,6 +279,7 @@ export function WorkspaceShell({
   const [quizAutoGenerating, setQuizAutoGenerating] = useState(false);
   const [quizAutoStatus, setQuizAutoStatus] = useState('');
   const [quizAutoTriggeredFor, setQuizAutoTriggeredFor] = useState('');
+  const [autoNotesTriggeredKey, setAutoNotesTriggeredKey] = useState('');
 
   const quickPrompts = useMemo(
     () => [
@@ -303,6 +306,17 @@ export function WorkspaceShell({
   const examFocusItems = useMemo(() => toTextArray(selectedProject?.lastRun?.examFocusJson), [selectedProject?.lastRun?.examFocusJson]);
   const graphVisuals = useMemo(() => parseGraphVisuals(selectedProject?.lastRun?.visualsJson), [selectedProject?.lastRun?.visualsJson]);
   const hasPdfAsset = useMemo(() => Boolean(selectedProject?.assets?.some((asset) => asset.kind === 'pdf')), [selectedProject?.assets]);
+  const latestPdfCreatedAt = useMemo(() => {
+    if (!selectedProject?.assets?.length) return 0;
+    const latestPdf = selectedProject.assets
+      .filter((asset) => asset.kind === 'pdf')
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+    return latestPdf?.createdAt ? new Date(latestPdf.createdAt).getTime() : 0;
+  }, [selectedProject?.assets]);
+  const latestRunCreatedAt = useMemo(
+    () => (selectedProject?.lastRun?.createdAt ? new Date(selectedProject.lastRun.createdAt).getTime() : 0),
+    [selectedProject?.lastRun?.createdAt],
+  );
 
   const basePreviewPdfUrl = useMemo(() => {
     if (!selectedProject) return '';
@@ -416,6 +430,7 @@ export function WorkspaceShell({
     setQuizAutoGenerating(false);
     setQuizAutoStatus('');
     setQuizAutoTriggeredFor('');
+    setAutoNotesTriggeredKey('');
   }, [selectedProject?.id, selectedProject?.lastRun?.questionsJson]);
 
   useEffect(() => {
@@ -782,6 +797,47 @@ export function WorkspaceShell({
     }
   }
 
+  async function autoGenerateNotesForUploadedPdf() {
+    if (!selectedProject?.id || isGenerating) return;
+    setIsGenerating(true);
+    setGenerationStatus('PDF 업로드 감지: 필기를 자동 생성하는 중...');
+    setLiveNotes(['PDF 본문을 분석해 자동 필기를 준비하는 중...']);
+    try {
+      const formData = new FormData();
+      formData.set('projectId', selectedProject.id);
+      formData.set('redirectTo', `/?projectId=${selectedProject.id}`);
+      formData.set('noteText', '업로드된 PDF 기준으로 핵심 필기와 시험 대비 요점을 자동 생성해줘.');
+      formData.set('customNotes', '');
+
+      const response = await fetch('/api/generate', { method: 'POST', body: formData, redirect: 'follow' });
+      if (response.redirected) {
+        window.location.assign(response.url);
+        return;
+      }
+      if (!response.ok) {
+        const raw = await response.text().catch(() => '');
+        let message = '자동 필기 생성 중 오류가 발생했습니다.';
+        if (raw) {
+          try {
+            const payload = JSON.parse(raw) as { error?: unknown };
+            if (typeof payload.error === 'string') message = payload.error;
+          } catch {
+            message = raw.slice(0, 180);
+          }
+        }
+        setGenerationStatus(message);
+        return;
+      }
+
+      setGenerationStatus('자동 필기 생성 완료');
+      router.refresh();
+    } catch {
+      setGenerationStatus('자동 필기 생성 중 네트워크 오류가 발생했습니다.');
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
   useEffect(() => {
     if (workspaceView !== 'quiz') return;
     if (!selectedProject?.id) return;
@@ -796,6 +852,19 @@ export function WorkspaceShell({
     if (quizAutoTriggeredFor === selectedProject.id) return;
     void autoGenerateQuiz();
   }, [workspaceView, selectedProject?.id, hasPdfAsset, quizItems.length, quizAutoTriggeredFor]);
+
+  useEffect(() => {
+    if (!selectedProject?.id) return;
+    if (!latestPdfCreatedAt) return;
+    const needsNewRun = !latestRunCreatedAt || latestPdfCreatedAt > latestRunCreatedAt;
+    if (!needsNewRun) return;
+
+    const triggerKey = `${selectedProject.id}:${latestPdfCreatedAt}`;
+    if (autoNotesTriggeredKey === triggerKey) return;
+
+    setAutoNotesTriggeredKey(triggerKey);
+    void autoGenerateNotesForUploadedPdf();
+  }, [selectedProject?.id, latestPdfCreatedAt, latestRunCreatedAt, autoNotesTriggeredKey]);
 
   return (
     <div
