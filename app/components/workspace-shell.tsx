@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Languages, Paperclip, Pencil, Plus, Trash2, UploadCloud, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Languages, Moon, Paperclip, Pencil, Plus, Sun, Trash2, UploadCloud, X } from 'lucide-react';
 import { AuthControls } from './auth-controls';
 
 type ProjectItem = {
@@ -275,6 +275,7 @@ export function WorkspaceShell({
   const [billingStatus, setBillingStatus] = useState('');
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [autoRechargeEnabled, setAutoRechargeEnabled] = useState(false);
+  const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
   const [workspaceView, setWorkspaceView] = useState<'notes' | 'quiz'>('notes');
   const [regeneratingPage, setRegeneratingPage] = useState<number | null>(null);
   const [pageRegenerationStatus, setPageRegenerationStatus] = useState('');
@@ -419,6 +420,23 @@ export function WorkspaceShell({
       window.removeEventListener('mouseup', onUp);
     };
   }, [sidebarResizing]);
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem('beautify-theme');
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      setThemeMode(savedTheme);
+      return;
+    }
+
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    setThemeMode(prefersDark ? 'dark' : 'light');
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+    document.documentElement.style.colorScheme = themeMode;
+    window.localStorage.setItem('beautify-theme', themeMode);
+  }, [themeMode]);
 
   useEffect(() => {
     setTranslationMode('original');
@@ -1214,6 +1232,15 @@ export function WorkspaceShell({
             {audioName ? <div className="fileBadge">최근 드롭 오디오 · {audioName}</div> : null}
           </div>
           <div className="topBarActions">
+            <button
+              className={`iconButton themeToggleButton ${themeMode === 'dark' ? 'themeToggleButtonActive' : ''}`}
+              type="button"
+              aria-label={themeMode === 'dark' ? '기본 모드로 전환' : '다크 모드로 전환'}
+              title={themeMode === 'dark' ? '기본모드' : '다크모드'}
+              onClick={() => setThemeMode((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+            >
+              {themeMode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
             <AuthControls />
             <div className="billingMini">
               <div className="billingBalance">크레딧 {loadingBalance ? '불러오는 중...' : Number(creditBalance || '0').toLocaleString()}</div>
