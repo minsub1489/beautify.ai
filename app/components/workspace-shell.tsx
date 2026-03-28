@@ -249,6 +249,9 @@ export function WorkspaceShell({
   const router = useRouter();
   const attachmentRef = useRef<HTMLInputElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
+  const previewEditWrapRef = useRef<HTMLDivElement>(null);
+  const pdfEditAutoScrollFrameRef = useRef<number | null>(null);
+  const pdfEditAutoScrollSpeedRef = useRef(0);
   const [noteDraft, setNoteDraft] = useState('');
   const [pdfName, setPdfName] = useState('');
   const [audioName, setAudioName] = useState('');
@@ -372,7 +375,7 @@ export function WorkspaceShell({
   }, [basePreviewPdfUrl, translatedAssetId, translationMode]);
   const buildPdfPagePreviewUrl = (page: number) => {
     if (!latestPdfAsset?.id) return '';
-    return `/api/assets/${latestPdfAsset.id}/page-preview?page=${page}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`;
+    return `/api/assets/${latestPdfAsset.id}/page-preview?page=${page}#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit`;
   };
   const pdfEditPreviewLabel = useMemo(() => {
     if (pdfPageLoading) return 'PDF 페이지를 불러오는 중...';
@@ -448,6 +451,14 @@ export function WorkspaceShell({
   }, [themeMode]);
 
   useEffect(() => {
+    return () => {
+      if (pdfEditAutoScrollFrameRef.current !== null) {
+        cancelAnimationFrame(pdfEditAutoScrollFrameRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     setTranslationMode('original');
     setTranslatedAssetId('');
     setTranslationLoading(false);
@@ -464,7 +475,21 @@ export function WorkspaceShell({
     setPdfPageStatus('');
     setDraggingPdfPageId('');
     setDragOverPdfPageId('');
+    pdfEditAutoScrollSpeedRef.current = 0;
+    if (pdfEditAutoScrollFrameRef.current !== null) {
+      cancelAnimationFrame(pdfEditAutoScrollFrameRef.current);
+      pdfEditAutoScrollFrameRef.current = null;
+    }
   }, [selectedProject?.id]);
+
+  useEffect(() => {
+    if (pdfEditMode) return;
+    pdfEditAutoScrollSpeedRef.current = 0;
+    if (pdfEditAutoScrollFrameRef.current !== null) {
+      cancelAnimationFrame(pdfEditAutoScrollFrameRef.current);
+      pdfEditAutoScrollFrameRef.current = null;
+    }
+  }, [pdfEditMode]);
 
   useEffect(() => {
     setEditingTitle(false);
@@ -939,6 +964,64 @@ export function WorkspaceShell({
   function resetPdfDragState() {
     setDraggingPdfPageId('');
     setDragOverPdfPageId('');
+    stopPdfEditAutoScroll();
+  }
+
+  function stopPdfEditAutoScroll() {
+    pdfEditAutoScrollSpeedRef.current = 0;
+    if (pdfEditAutoScrollFrameRef.current !== null) {
+      cancelAnimationFrame(pdfEditAutoScrollFrameRef.current);
+      pdfEditAutoScrollFrameRef.current = null;
+    }
+  }
+
+  function runPdfEditAutoScroll() {
+    const container = previewEditWrapRef.current;
+    const speed = pdfEditAutoScrollSpeedRef.current;
+
+    if (!container || Math.abs(speed) < 0.5) {
+      stopPdfEditAutoScroll();
+      return;
+    }
+
+    const previousTop = container.scrollTop;
+    container.scrollTop += speed;
+
+    if (container.scrollTop === previousTop) {
+      stopPdfEditAutoScroll();
+      return;
+    }
+
+    pdfEditAutoScrollFrameRef.current = window.requestAnimationFrame(runPdfEditAutoScroll);
+  }
+
+  function updatePdfEditAutoScroll(clientY: number) {
+    if (!draggingPdfPageId) return;
+
+    const container = previewEditWrapRef.current;
+    if (!container) return;
+
+    const bounds = container.getBoundingClientRect();
+    const threshold = Math.max(72, Math.min(128, bounds.height * 0.2));
+    let nextSpeed = 0;
+
+    if (clientY > bounds.bottom - threshold) {
+      const ratio = (clientY - (bounds.bottom - threshold)) / threshold;
+      nextSpeed = Math.min(28, 6 + ratio * 22);
+    } else if (clientY < bounds.top + threshold) {
+      const ratio = ((bounds.top + threshold) - clientY) / threshold;
+      nextSpeed = -Math.min(28, 6 + ratio * 22);
+    }
+
+    if (Math.abs(nextSpeed) < 0.5) {
+      stopPdfEditAutoScroll();
+      return;
+    }
+
+    pdfEditAutoScrollSpeedRef.current = nextSpeed;
+    if (pdfEditAutoScrollFrameRef.current === null) {
+      pdfEditAutoScrollFrameRef.current = window.requestAnimationFrame(runPdfEditAutoScroll);
+    }
   }
 
   function resetPdfPageEdits() {
@@ -1356,7 +1439,16 @@ export function WorkspaceShell({
 
             {previewPdfUrl ? (
               pdfEditMode ? (
-                <div className="previewEditWrap">
+                <div
+                  className="previewEditWrap"
+                  ref={previewEditWrapRef}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    updatePdfEditAutoScroll(event.clientY);
+                  }}
+                  onDragLeave={stopPdfEditAutoScroll}
+                  onDrop={stopPdfEditAutoScroll}
+                >
                   <div className="previewEditToolbar">
                     <div className="muted">{pdfEditPreviewLabel}</div>
                     <div className="row">
@@ -1396,6 +1488,7 @@ export function WorkspaceShell({
                           }}
                           onDragOver={(event) => {
                             event.preventDefault();
+                            updatePdfEditAutoScroll(event.clientY);
                             if (draggingPdfPageId && draggingPdfPageId !== item.id) {
                               setDragOverPdfPageId(item.id);
                             }

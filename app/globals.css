@@ -226,11 +226,14 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   border: 1px solid rgba(236,72,153,0.14);
   border-radius: 18px;
   min-height: 540px;
+  max-height: 72vh;
   background: linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(255,245,250,0.92) 100%);
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .previewEditToolbar {
   display: flex;
@@ -241,12 +244,14 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 }
 .previewEditGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 14px;
+  align-items: start;
 }
 .previewEditCard {
   position: relative;
-  min-height: 236px;
+  min-height: 304px;
+  aspect-ratio: 0.74 / 1;
   border-radius: 18px;
   overflow: hidden;
   border: 1px solid rgba(236,72,153,0.14);
@@ -273,15 +278,21 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 }
 .previewEditCardViewport {
   position: absolute;
-  inset: 0;
+  inset: 10px 10px 78px;
   overflow: hidden;
   background: #ffffff;
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
 }
 .previewEditCardFrame {
-  width: 100%;
-  height: 100%;
+  width: 108%;
+  height: 108%;
   border: 0;
   pointer-events: none;
+  margin-left: -4%;
+  transform: scale(0.94);
+  transform-origin: top center;
+  background: #ffffff;
 }
 .previewEditCardRemove {
   z-index: 3;
@@ -497,7 +508,7 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   .pageEditorToolbar { flex-direction: column; align-items: stretch; }
   .pageEditorItemMain { align-items: flex-start; }
   .previewFrame { height: 62vh; min-height: 420px; }
-  .previewEditWrap { min-height: 420px; }
+  .previewEditWrap { min-height: 420px; max-height: 62vh; }
   .previewEditToolbar { align-items: stretch; }
   .previewEditGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .previewFrameWrap, .previewEmpty, .previewCard, .chatPanel { min-height: auto; }
