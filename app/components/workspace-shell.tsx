@@ -1347,7 +1347,7 @@ export function WorkspaceShell({
                   >
                     <Paperclip size={18} />
                   </button>
-                  <button className="button" type="submit" disabled={isGenerating}>
+                  <button className="button generateButton" type="submit" disabled={isGenerating}>
                     {isGenerating ? '생성 중...' : '생성'}
                   </button>
                 </div>
@@ -1515,7 +1515,7 @@ export function WorkspaceShell({
                   {quizAutoStatus ? <div className="muted">상태: {quizAutoStatus}</div> : null}
                   <button
                     type="button"
-                    className="button secondary"
+                    className="button generateButton"
                     disabled={quizAutoGenerating || !selectedProject?.id || !hasPdfAsset}
                     onClick={() => {
                       setQuizAutoTriggeredFor('');

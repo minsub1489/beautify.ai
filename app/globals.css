@@ -393,3 +393,288 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   .sidebarToggleTitleLeft { top: 20px; left: 18px; }
   .sidebarResizer { display: none; }
 }
+
+:root {
+  --bg: #f5f7fb;
+  --card: #ffffff;
+  --text: #101114;
+  --muted: #68707d;
+  --line: #e6e8ef;
+  --accent: #2563eb;
+  --accent-soft: #eef4ff;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.appMain {
+  position: static;
+}
+
+.appMain::before {
+  content: none;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.04);
+  backdrop-filter: none;
+}
+
+.input, .textarea {
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: none;
+}
+
+.button {
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--line);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.button.secondary {
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.button.danger {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
+}
+
+.badge {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid #dce7ff;
+}
+
+pre {
+  background: #fafbff;
+}
+
+.chatBubble.bot {
+  background: #eef4ff;
+  color: #173166;
+}
+
+.chatBubble.user {
+  background: #1f2937;
+  color: #fff;
+}
+
+.fileBadge {
+  background: #f4f7ff;
+  color: #3553b7;
+  border: 1px solid #dce7ff;
+  font-weight: 600;
+}
+
+.attachmentChip {
+  border: 1px solid var(--line);
+  background: #fafcff;
+}
+
+.pageNotePanel {
+  border: 1px solid #dce7ff;
+  background: #f8fbff;
+}
+
+.pageNoteItem {
+  border: 1px solid #d6e1ff;
+  background: #fff;
+}
+
+.pageNoteTitle {
+  color: #132a63;
+}
+
+.pageNoteBody {
+  color: #1f2f4d;
+}
+
+.pageEditorPanel {
+  border: 1px solid #dce7ff;
+  background: #f8fbff;
+}
+
+.pageEditorCountBadge {
+  background: #eef4ff;
+  color: #2563eb;
+  border: 1px solid #dce7ff;
+}
+
+.pageEditorItem {
+  border: 1px solid #d6e1ff;
+  background: #fff;
+}
+
+.pageEditorTitle {
+  color: #132a63;
+}
+
+.pageEditorMeta,
+.quizMeta,
+.quizHint,
+.quizProgressRemaining,
+.quizProgressMeta {
+  color: #51607f;
+}
+
+.pageEditorEmpty {
+  border: 1px dashed #bfd0ff;
+  background: #fff;
+  color: #51607f;
+}
+
+.previewFrameWrap {
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: none;
+}
+
+.previewDropOverlay {
+  border: 2px dashed var(--accent);
+  background: rgba(37, 99, 235, 0.1);
+  color: #1542aa;
+}
+
+.iconButton {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--text);
+}
+
+.sidebarItem:hover,
+.sidebarItem.active {
+  background: #f8faff;
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+.viewToggle {
+  border: 1px solid var(--line);
+  background: #f7f9ff;
+}
+
+.viewToggleButton.active {
+  background: #fff;
+  color: #133080;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.14);
+}
+
+.billingMini {
+  border: 1px solid var(--line);
+  background: #fbfcff;
+}
+
+.billingBalance {
+  color: #21325f;
+}
+
+.quizSummary {
+  border: 1px solid #dce7ff;
+  background: #f8fbff;
+  color: #1e2a55;
+}
+
+.quizProgressCard {
+  border: 1px solid #dce7ff;
+  background: #f8fbff;
+}
+
+.quizProgressCount {
+  color: #132a63;
+}
+
+.quizProgressBar {
+  background: #e5edff;
+}
+
+.quizProgressFill {
+  background: linear-gradient(90deg, #2563eb 0%, #60a5fa 100%);
+}
+
+.quizItem {
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.quizChoice {
+  border: 1px solid #ced8f7;
+  background: #f9fbff;
+  color: #1e2a55;
+}
+
+.quizChoice.selected {
+  background: #ecf3ff;
+  border-color: #8fb0ff;
+  color: #133080;
+}
+
+.quizLiveStatus.unanswered {
+  background: #f8fbff;
+  color: #51607f;
+  border: 1px solid #dce7ff;
+}
+
+.wrongNoteWrap {
+  border: 1px solid #dce7ff;
+  background: #f8fbff;
+}
+
+.wrongNoteItem {
+  border: 1px solid #d6e1ff;
+  background: #fff;
+}
+
+.workspaceTitle {
+  background: none;
+  color: var(--text);
+  -webkit-background-clip: initial;
+  background-clip: initial;
+}
+
+.dropZone {
+  border: 1px dashed #bfd0ff;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+}
+
+.composerInput {
+  border: 1px solid rgba(236, 72, 153, 0.22);
+  background: linear-gradient(180deg, #fff8fc 0%, #fff 100%);
+}
+
+.clipButton {
+  background: linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(255,238,246,0.98) 100%);
+  border-color: rgba(236, 72, 153, 0.22);
+  color: #be185d;
+}
+
+.chip {
+  background: linear-gradient(135deg, rgba(255,126,182,0.16) 0%, rgba(244,114,182,0.12) 100%);
+  color: #9d174d;
+  border: 1px solid rgba(236, 72, 153, 0.16);
+  font-weight: 700;
+}
+
+.liveNotePanel,
+.quizAutoInline {
+  border: 1px solid rgba(236,72,153,0.16);
+  background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,241,247,0.96) 100%);
+}
+
+.generateButton {
+  background: linear-gradient(135deg, var(--pink-1) 0%, var(--pink-4) 52%, var(--pink-6) 100%);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 12px 26px rgba(236, 72, 153, 0.22);
+  font-weight: 700;
+}
