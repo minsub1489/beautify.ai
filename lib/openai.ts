@@ -245,10 +245,10 @@ export async function generateGeminiJson<T>(params: {
 반드시 아래 JSON 스키마를 지켜 유효한 JSON만 출력하라:
 ${JSON.stringify(params.schema)}
 `;
-    if (getOpenRouterKey()) {
+    if (getOpenAIKey()) {
       try {
-        const text = await openRouterGenerate({
-          model: OPENROUTER_MODELS.reasoning,
+        const text = await openAIGenerate({
+          model: OPENAI_MODELS.reasoning,
           prompt: fallbackPrompt,
           temperature: 0.1,
         });
@@ -256,9 +256,9 @@ ${JSON.stringify(params.schema)}
       } catch {}
     }
 
-    if (getOpenAIKey()) {
-      const text = await openAIGenerate({
-        model: OPENAI_MODELS.reasoning,
+    if (getOpenRouterKey()) {
+      const text = await openRouterGenerate({
+        model: OPENROUTER_MODELS.reasoning,
         prompt: fallbackPrompt,
         temperature: 0.1,
       });
@@ -294,19 +294,19 @@ export async function generateGeminiText(params: {
       .filter(Boolean)
       .join('\n');
 
-    if (getOpenRouterKey()) {
+    if (getOpenAIKey()) {
       try {
-        return await openRouterGenerate({
-          model: OPENROUTER_MODELS.text,
+        return await openAIGenerate({
+          model: OPENAI_MODELS.text,
           prompt: mergedPrompt,
           temperature: params.temperature ?? 0.2,
         });
       } catch {}
     }
 
-    if (getOpenAIKey()) {
-      return openAIGenerate({
-        model: OPENAI_MODELS.text,
+    if (getOpenRouterKey()) {
+      return openRouterGenerate({
+        model: OPENROUTER_MODELS.text,
         prompt: mergedPrompt,
         temperature: params.temperature ?? 0.2,
       });
