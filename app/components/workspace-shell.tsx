@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import katex from 'katex';
-import { ChevronLeft, ChevronRight, ExternalLink, Languages, Paperclip, Pencil, Plus, UploadCloud } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Languages, Paperclip, Pencil, Plus, Trash2, UploadCloud } from 'lucide-react';
 import { AuthControls } from './auth-controls';
 
 type ProjectItem = {
@@ -264,6 +264,8 @@ export function WorkspaceShell({
   const [translationLoading, setTranslationLoading] = useState(false);
   const [translationStatus, setTranslationStatus] = useState('');
   const [translatedAssetId, setTranslatedAssetId] = useState('');
+  const [pdfRemoving, setPdfRemoving] = useState(false);
+  const [pdfRemoveStatus, setPdfRemoveStatus] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [titleSaving, setTitleSaving] = useState(false);
@@ -308,6 +310,12 @@ export function WorkspaceShell({
   const examFocusItems = useMemo(() => toTextArray(selectedProject?.lastRun?.examFocusJson), [selectedProject?.lastRun?.examFocusJson]);
   const graphVisuals = useMemo(() => parseGraphVisuals(selectedProject?.lastRun?.visualsJson), [selectedProject?.lastRun?.visualsJson]);
   const hasPdfAsset = useMemo(() => Boolean(selectedProject?.assets?.some((asset) => asset.kind === 'pdf')), [selectedProject?.assets]);
+  const latestPdfAsset = useMemo(() => {
+    if (!selectedProject?.assets?.length) return null;
+    return [...selectedProject.assets]
+      .filter((asset) => asset.kind === 'pdf')
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0] || null;
+  }, [selectedProject?.assets]);
   const latestPdfCreatedAt = useMemo(() => {
     if (!selectedProject?.assets?.length) return 0;
     return selectedProject.assets
@@ -409,6 +417,8 @@ export function WorkspaceShell({
     setTranslatedAssetId('');
     setTranslationLoading(false);
     setTranslationStatus('');
+    setPdfRemoving(false);
+    setPdfRemoveStatus('');
   }, [selectedProject?.id]);
 
   useEffect(() => {
@@ -668,6 +678,34 @@ export function WorkspaceShell({
       setTranslationMode('original');
     } finally {
       setTranslationLoading(false);
+    }
+  }
+
+  async function removeLatestPdf() {
+    if (!latestPdfAsset?.id || pdfRemoving) return;
+
+    const confirmed = window.confirm('현재 업로드된 PDF를 제거할까요? 이 PDF로 만든 필기, 퀴즈, 번역본도 함께 정리됩니다.');
+    if (!confirmed) return;
+
+    setPdfRemoving(true);
+    setPdfRemoveStatus('');
+    try {
+      const response = await fetch(`/api/assets/${latestPdfAsset.id}`, { method: 'DELETE' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setPdfRemoveStatus(typeof payload?.error === 'string' ? payload.error : 'PDF를 제거하지 못했습니다.');
+        return;
+      }
+
+      setTranslationMode('original');
+      setTranslatedAssetId('');
+      setQuizAutoStatus('');
+      setPdfRemoveStatus('업로드된 PDF를 제거했습니다.');
+      router.refresh();
+    } catch {
+      setPdfRemoveStatus('PDF 제거 중 네트워크 오류가 발생했습니다.');
+    } finally {
+      setPdfRemoving(false);
     }
   }
 
@@ -985,22 +1023,36 @@ export function WorkspaceShell({
           >
             <div className="previewHeader">
               <div className="sectionTitle">업로드 자료 미리보기</div>
-              {previewPdfUrl ? (
-                <button
-                  className="button secondary"
-                  type="button"
-                  onClick={toggleTranslation}
-                  disabled={translationLoading && translationMode !== 'translated'}
-                  title={translationMode === 'translated' ? '원문 보기로 전환' : '한국어 번역 보기'}
-                >
-                  <Languages size={16} />
-                  {translationLoading && translationMode !== 'translated'
-                    ? '번역 중...'
-                    : translationMode === 'translated'
-                      ? '원문 보기'
-                      : '번역'}
-                </button>
-              ) : null}
+              <div className="row">
+                {previewPdfUrl ? (
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={toggleTranslation}
+                    disabled={translationLoading && translationMode !== 'translated'}
+                    title={translationMode === 'translated' ? '원문 보기로 전환' : '한국어 번역 보기'}
+                  >
+                    <Languages size={16} />
+                    {translationLoading && translationMode !== 'translated'
+                      ? '번역 중...'
+                      : translationMode === 'translated'
+                        ? '원문 보기'
+                        : '번역'}
+                  </button>
+                ) : null}
+                {latestPdfAsset ? (
+                  <button
+                    className="button danger"
+                    type="button"
+                    onClick={() => void removeLatestPdf()}
+                    disabled={pdfRemoving}
+                    title={`${latestPdfAsset.originalName} 제거`}
+                  >
+                    <Trash2 size={16} />
+                    {pdfRemoving ? '제거 중...' : 'PDF 제거'}
+                  </button>
+                ) : null}
+              </div>
             </div>
             {dragging ? <div className="previewDropOverlay">여기에 PDF를 놓으면 중앙 미리보기에 업로드됩니다</div> : null}
 
@@ -1027,6 +1079,7 @@ export function WorkspaceShell({
             )}
 
             {translationStatus ? <div className="muted">{translationStatus}</div> : null}
+            {pdfRemoveStatus ? <div className="muted">{pdfRemoveStatus}</div> : null}
 
           </div>
 

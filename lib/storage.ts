@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { put } from '@vercel/blob';
+import { del, put } from '@vercel/blob';
 
 const uploadRoot = path.join(process.cwd(), 'uploads');
 
@@ -39,6 +39,26 @@ export async function readStoredFile(storageKeyOrPath: string) {
     return fs.readFile(storageKeyOrPath);
   }
   throw new Error('Unsupported storage key');
+}
+
+export async function deleteStoredFile(params: {
+  storageKey: string;
+  publicUrl?: string;
+}) {
+  if (params.storageKey.startsWith('/')) {
+    try {
+      await fs.unlink(params.storageKey);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+    return;
+  }
+
+  if (process.env.BLOB_READ_WRITE_TOKEN && params.publicUrl) {
+    await del(params.publicUrl, { token: process.env.BLOB_READ_WRITE_TOKEN });
+  }
 }
 
 function sanitize(name: string) {
