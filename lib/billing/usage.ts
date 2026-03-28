@@ -26,6 +26,7 @@ type FailAiUsageInput = {
 };
 
 const HOLD_MINIMUM_CREDITS = BigInt(process.env.BILLING_HOLD_MIN_CREDITS || '300');
+const BILLING_FREE_MODE = (process.env.BILLING_FREE_MODE || '').toLowerCase() === 'true';
 
 export async function beginAiUsage(input: BeginAiUsageInput) {
   const pricing = await resolvePricingRule(input.feature, input.model);
@@ -55,26 +56,28 @@ export async function beginAiUsage(input: BeginAiUsageInput) {
     },
   });
 
-  await maybeAutoRecharge({
-    userId: input.userId,
-    reasonRequestId: request.id,
-  });
+  if (!BILLING_FREE_MODE) {
+    await maybeAutoRecharge({
+      userId: input.userId,
+      reasonRequestId: request.id,
+    });
 
-  await applyLedgerEntry({
-    userId: input.userId,
-    type: 'hold',
-    amount: -holdAmount,
-    requestId: request.id,
-    reason: 'AI 사용 예약 차감',
-    idempotencyKey: `hold:${request.id}`,
-    metadata: {
-      estimatedCost: estimatedCost.toString(),
-      holdAmount: holdAmount.toString(),
-      ruleVersion: pricing.ruleVersion,
-      model: input.model,
-      feature: input.feature,
-    },
-  });
+    await applyLedgerEntry({
+      userId: input.userId,
+      type: 'hold',
+      amount: -holdAmount,
+      requestId: request.id,
+      reason: 'AI 사용 예약 차감',
+      idempotencyKey: `hold:${request.id}`,
+      metadata: {
+        estimatedCost: estimatedCost.toString(),
+        holdAmount: holdAmount.toString(),
+        ruleVersion: pricing.ruleVersion,
+        model: input.model,
+        feature: input.feature,
+      },
+    });
+  }
 
   return {
     requestId: request.id,
@@ -89,6 +92,24 @@ export async function finalizeAiUsage(input: FinalizeAiUsageInput) {
     where: { id: input.requestId },
   });
   if (!request) return;
+
+  if (BILLING_FREE_MODE) {
+    await prisma.aiUsageRequest.update({
+      where: { id: request.id },
+      data: {
+        status: 'succeeded',
+        outputTokens: estimateTokensFromText(input.outputText),
+        actualCost: 0n,
+        completedAt: new Date(),
+        metadata: {
+          ...(request.metadata && typeof request.metadata === 'object' ? request.metadata : {}),
+          ...(input.metadata || {}),
+          billingMode: 'free',
+        } as Prisma.InputJsonValue,
+      },
+    });
+    return;
+  }
 
   const pricing = await resolvePricingRule(request.feature, request.model);
   const outputTokens = estimateTokensFromText(input.outputText);
@@ -168,6 +189,23 @@ export async function failAiUsage(input: FailAiUsageInput) {
     where: { id: input.requestId },
   });
   if (!request) return;
+
+  if (BILLING_FREE_MODE) {
+    await prisma.aiUsageRequest.update({
+      where: { id: request.id },
+      data: {
+        status: 'failed',
+        errorCode: input.errorCode || 'FAILED',
+        completedAt: new Date(),
+        metadata: {
+          ...(request.metadata && typeof request.metadata === 'object' ? request.metadata : {}),
+          ...(input.metadata || {}),
+          billingMode: 'free',
+        } as Prisma.InputJsonValue,
+      },
+    });
+    return;
+  }
 
   const holdAmount = request.estimatedCost > HOLD_MINIMUM_CREDITS ? request.estimatedCost : HOLD_MINIMUM_CREDITS;
   await applyLedgerEntry({
