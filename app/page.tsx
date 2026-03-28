@@ -64,6 +64,7 @@ export default async function HomePage({
                       summary: selected.runs[0].summary,
                       outputUrl: selected.runs[0].outputAsset?.publicUrl,
                       examFocusJson: selected.runs[0].examFocusJson,
+                      questionsJson: selected.runs[0].questionsJson,
                     }
                   : null,
               }

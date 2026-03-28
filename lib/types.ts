@@ -24,10 +24,17 @@ export type VisualSpec = {
 
 export type NotesByPage = { page: number; notes: string }[];
 
+export type QuizQuestion = {
+  exam: 'midterm' | 'final';
+  question: string;
+  answer: string;
+  hint?: string;
+};
+
 export type GenerationResult = {
   summary: string;
   examFocus: string[];
   notesByPage: NotesByPage;
   visuals: VisualSpec[];
-  reviewQuestions: string[];
+  reviewQuestions: QuizQuestion[];
 };

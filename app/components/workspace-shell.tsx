@@ -33,6 +33,7 @@ type RunSummary = {
   summary?: string | null;
   outputUrl?: string | null;
   examFocusJson?: unknown;
+  questionsJson?: unknown;
 };
 
 type SelectedProject = {
@@ -45,6 +46,68 @@ type SelectedProject = {
   lastRun?: RunSummary | null;
   latestPdfExcerpt?: string;
 };
+
+type QuizItem = {
+  exam: 'midterm' | 'final';
+  question: string;
+  answer: string;
+  hint?: string;
+};
+
+function sanitizeText(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value.trim() : fallback;
+}
+
+function normalizeExam(value: unknown): 'midterm' | 'final' | null {
+  if (value === 'midterm' || value === 'final') return value;
+  if (typeof value !== 'string') return null;
+  const lower = value.toLowerCase();
+  if (lower.includes('중간') || lower.includes('mid')) return 'midterm';
+  if (lower.includes('기말') || lower.includes('final')) return 'final';
+  return null;
+}
+
+function parseQuizItems(raw: unknown): QuizItem[] {
+  if (!Array.isArray(raw)) return [];
+
+  const parsed = raw
+    .map((item): QuizItem | null => {
+      if (typeof item === 'string') {
+        const exam = normalizeExam(item) || 'midterm';
+        const question = item
+          .replace(/^\s*(중간|기말|midterm|final)\s*[:|-]\s*/i, '')
+          .trim();
+        if (!question) return null;
+        return {
+          exam,
+          question,
+          answer: '생성된 필기와 요약을 참고해 스스로 답해보세요.',
+          hint: '핵심 용어 정의, 비교 포인트, 적용 예시를 함께 떠올려 보세요.',
+        };
+      }
+
+      if (!item || typeof item !== 'object') return null;
+      const record = item as Record<string, unknown>;
+      const exam = normalizeExam(record.exam ?? record.type ?? record.phase) || 'midterm';
+      const question = sanitizeText(record.question);
+      const answer = sanitizeText(record.answer, '정답 요약이 제공되지 않았습니다.');
+      const hint = sanitizeText(record.hint);
+      if (!question) return null;
+      return { exam, question, answer, hint: hint || undefined };
+    })
+    .filter((item): item is QuizItem => Boolean(item));
+
+  if (!parsed.length) return [];
+
+  const hasFinal = parsed.some((item) => item.exam === 'final');
+  if (hasFinal) return parsed;
+
+  const midpoint = Math.ceil(parsed.length / 2);
+  return parsed.map((item, index) => ({
+    ...item,
+    exam: index < midpoint ? 'midterm' : 'final',
+  }));
+}
 
 export function WorkspaceShell({
   projects,
@@ -80,6 +143,8 @@ export function WorkspaceShell({
   const [billingStatus, setBillingStatus] = useState('');
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [autoRechargeEnabled, setAutoRechargeEnabled] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState<'notes' | 'quiz'>('notes');
+  const [quizExam, setQuizExam] = useState<'midterm' | 'final'>('midterm');
 
   const quickPrompts = useMemo(
     () => [
@@ -95,11 +160,16 @@ export function WorkspaceShell({
     () => [
       'PDF 본문과 첨부 자료를 읽는 중...',
       '강의 핵심 개념을 페이지별로 정리하는 중...',
-      '시험 포인트와 시각 자료를 구성하는 중...',
+      '시험 포인트와 중간/기말 대비 퀴즈를 구성하는 중...',
       '미리보기용 필기를 PDF 위에 반영하는 중...',
     ],
     [],
   );
+
+  const quizItems = useMemo(() => parseQuizItems(selectedProject?.lastRun?.questionsJson), [selectedProject?.lastRun?.questionsJson]);
+  const midtermQuiz = useMemo(() => quizItems.filter((item) => item.exam === 'midterm'), [quizItems]);
+  const finalQuiz = useMemo(() => quizItems.filter((item) => item.exam === 'final'), [quizItems]);
+  const visibleQuiz = quizExam === 'midterm' ? midtermQuiz : finalQuiz;
 
   const previewPdfUrl = useMemo(() => {
     if (!selectedProject) return '';
@@ -187,6 +257,11 @@ export function WorkspaceShell({
     setTitleError('');
     setTitleDraft(selectedProject?.title || '');
   }, [selectedProject?.id, selectedProject?.title]);
+
+  useEffect(() => {
+    setWorkspaceView('notes');
+    setQuizExam('midterm');
+  }, [selectedProject?.id]);
 
   useEffect(() => {
     let active = true;
@@ -578,6 +653,26 @@ export function WorkspaceShell({
             {audioName ? <div className="fileBadge">최근 드롭 오디오 · {audioName}</div> : null}
           </div>
           <div className="topBarActions">
+            <div className="viewToggle" role="tablist" aria-label="작업 보기 전환">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={workspaceView === 'notes'}
+                className={`viewToggleButton ${workspaceView === 'notes' ? 'active' : ''}`}
+                onClick={() => setWorkspaceView('notes')}
+              >
+                필기
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={workspaceView === 'quiz'}
+                className={`viewToggleButton ${workspaceView === 'quiz' ? 'active' : ''}`}
+                onClick={() => setWorkspaceView('quiz')}
+              >
+                퀴즈
+              </button>
+            </div>
             <AuthControls />
             <div className="billingMini">
               <div className="billingBalance">크레딧 {loadingBalance ? '불러오는 중...' : Number(creditBalance || '0').toLocaleString()}</div>
@@ -620,52 +715,101 @@ export function WorkspaceShell({
         ) : null}
 
         <div className="workspaceStudio">
-          <div
-            className="card stack previewCard"
-            onDragEnter={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={(e) => {
-              e.preventDefault();
-              if (e.currentTarget === e.target) setDragging(false);
-            }}
-            onDrop={async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setDragging(false);
-              await handleDrop(e.dataTransfer.files);
-            }}
-          >
-            <div className="sectionTitle">업로드 자료 미리보기</div>
-            {dragging ? <div className="previewDropOverlay">여기에 PDF를 놓으면 중앙 미리보기에 업로드됩니다</div> : null}
+          {workspaceView === 'notes' ? (
+            <div
+              className="card stack previewCard"
+              onDragEnter={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                if (e.currentTarget === e.target) setDragging(false);
+              }}
+              onDrop={async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDragging(false);
+                await handleDrop(e.dataTransfer.files);
+              }}
+            >
+              <div className="sectionTitle">업로드 자료 미리보기</div>
+              {dragging ? <div className="previewDropOverlay">여기에 PDF를 놓으면 중앙 미리보기에 업로드됩니다</div> : null}
 
-            {(isGenerating || liveNotes.length > 0) ? (
-              <div className="liveNotePanel">
-                <div className="label">실시간 필기</div>
-                {liveNotes.length ? (
-                  liveNotes.map((line, idx) => <div key={`${line}-${idx}`} className="liveNoteLine">{line}</div>)
-                ) : (
-                  <div className="liveNoteLine">필기 생성을 준비하고 있습니다...</div>
-                )}
-              </div>
-            ) : null}
+              {(isGenerating || liveNotes.length > 0) ? (
+                <div className="liveNotePanel">
+                  <div className="label">실시간 필기</div>
+                  {liveNotes.length ? (
+                    liveNotes.map((line, idx) => <div key={`${line}-${idx}`} className="liveNoteLine">{line}</div>)
+                  ) : (
+                    <div className="liveNoteLine">필기 생성을 준비하고 있습니다...</div>
+                  )}
+                </div>
+              ) : null}
 
-            {previewPdfUrl ? (
-              <div className="previewFrameWrap">
-                <iframe className="previewFrame" src={previewPdfUrl} title="PDF 미리보기" />
+              {previewPdfUrl ? (
+                <div className="previewFrameWrap">
+                  <iframe className="previewFrame" src={previewPdfUrl} title="PDF 미리보기" />
+                </div>
+              ) : (
+                <div className="dropZone previewEmpty">
+                  <UploadCloud size={26} />
+                  <div className="dropZoneTitle">PDF를 드롭하면 여기에 미리보기가 표시됩니다</div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="card stack previewCard quizCard">
+              <div className="quizHeader">
+                <div className="sectionTitle">시험 대비 퀴즈</div>
+                <div className="quizExamToggle" role="tablist" aria-label="시험 구간 선택">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={quizExam === 'midterm'}
+                    className={`chip ${quizExam === 'midterm' ? 'active' : ''}`}
+                    onClick={() => setQuizExam('midterm')}
+                  >
+                    중간고사
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={quizExam === 'final'}
+                    className={`chip ${quizExam === 'final' ? 'active' : ''}`}
+                    onClick={() => setQuizExam('final')}
+                  >
+                    기말고사
+                  </button>
+                </div>
               </div>
-            ) : (
-              <div className="dropZone previewEmpty">
-                <UploadCloud size={26} />
-                <div className="dropZoneTitle">PDF를 드롭하면 여기에 미리보기가 표시됩니다</div>
-              </div>
-            )}
-          </div>
+
+              {selectedProject?.lastRun?.summary ? (
+                <div className="quizSummary">{selectedProject.lastRun.summary}</div>
+              ) : null}
+
+              {visibleQuiz.length ? (
+                <div className="quizList">
+                  {visibleQuiz.map((item, idx) => (
+                    <div key={`${item.exam}-${idx}-${item.question}`} className="quizItem">
+                      <div className="quizQ">Q{idx + 1}. {item.question}</div>
+                      <div className="quizHint">힌트: {item.hint || '핵심 키워드 3개를 먼저 적고, 개념 간 차이를 연결해 보세요.'}</div>
+                      <div className="quizA">정답 포인트: {item.answer}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="dropZone previewEmpty">
+                  <div className="dropZoneTitle">퀴즈가 아직 없습니다</div>
+                  <div className="muted">PDF 업로드 후 생성을 누르면 중요한 부분 중심으로 중간/기말 대비 퀴즈가 만들어집니다.</div>
+                </div>
+              )}
+            </div>
+          )}
 
           <form className="card stack chatPanel" method="post" encType="multipart/form-data" onSubmit={handleGenerateSubmit}>
             <input type="hidden" name="projectId" value={selectedProject?.id || ''} />

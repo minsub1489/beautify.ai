@@ -65,6 +65,9 @@ pre { white-space: pre-wrap; word-break: break-word; background: #fafbff; paddin
 .workspaceMain { position: relative; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .topBar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .topBarActions { display: flex; gap: 8px; align-items: center; }
+.viewToggle { display: inline-flex; align-items: center; gap: 4px; padding: 4px; border-radius: 12px; border: 1px solid var(--line); background: #f7f9ff; }
+.viewToggleButton { border: none; background: transparent; color: #4b5565; border-radius: 10px; padding: 8px 12px; font-weight: 700; cursor: pointer; }
+.viewToggleButton.active { background: #fff; color: #133080; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.14); }
 .authControls { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .authStatus { font-size: 12px; color: var(--muted); padding: 0 4px; }
 .billingMini { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 14px; border: 1px solid var(--line); background: #fbfcff; }
@@ -119,6 +122,16 @@ pre { white-space: pre-wrap; word-break: break-word; background: #fafbff; paddin
 .translationLine:first-of-type { border-top: none; }
 .translationOriginal { font-size: 14px; line-height: 1.55; color: var(--text); }
 .translationSub { font-size: 12px; line-height: 1.5; color: var(--muted); margin-top: 4px; }
+.quizCard { min-height: 620px; overflow: auto; }
+.quizHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.quizExamToggle { display: inline-flex; align-items: center; gap: 8px; }
+.chip.active { background: #2563eb; color: #fff; }
+.quizSummary { border: 1px solid #dce7ff; border-radius: 14px; background: #f8fbff; padding: 12px 14px; color: #1e2a55; line-height: 1.6; }
+.quizList { display: flex; flex-direction: column; gap: 10px; }
+.quizItem { border: 1px solid var(--line); border-radius: 16px; padding: 14px; background: #fff; }
+.quizQ { font-weight: 700; line-height: 1.5; color: #101b3b; }
+.quizHint { margin-top: 8px; font-size: 13px; color: #47526b; }
+.quizA { margin-top: 8px; font-size: 14px; color: #24345f; line-height: 1.6; }
 .workspaceTitle { font-size: 30px; font-weight: 800; margin-bottom: 6px; }
 .workspaceTitleRow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .titleInlineForm { margin: 0; }
@@ -148,6 +161,8 @@ pre { white-space: pre-wrap; word-break: break-word; background: #fafbff; paddin
   .workspaceGrid, .workspaceGrid.lower, .workspaceStudio { grid-template-columns: 1fr; }
   .topBar { flex-direction: column; align-items: flex-start; }
   .topBarActions { width: 100%; justify-content: flex-end; }
+  .viewToggle { width: 100%; justify-content: space-between; }
+  .viewToggleButton { flex: 1; }
   .authControls { width: 100%; justify-content: flex-end; }
   .billingMini { width: 100%; justify-content: space-between; }
   .composerRow { flex-direction: column; align-items: stretch; }
