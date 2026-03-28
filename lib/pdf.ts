@@ -52,7 +52,7 @@ export async function annotatePdfWithNotes(params: {
       borderWidth: 1,
     });
 
-    page.drawText('AI 필기', {
+    drawTextSafe(page, 'AI Note', {
       x: cardX + 12,
       y: cardY + estimatedHeight - 20,
       size: 11,
@@ -63,7 +63,7 @@ export async function annotatePdfWithNotes(params: {
     let y = cardY + estimatedHeight - 38;
 
     if (important.length) {
-      page.drawText('형광펜 포인트', {
+      drawTextSafe(page, 'Highlight Points', {
         x: cardX + 12,
         y,
         size: 8.5,
@@ -84,7 +84,7 @@ export async function annotatePdfWithNotes(params: {
         });
         let pointY = y - 4;
         for (const line of pointLines) {
-          page.drawText(line, {
+          drawTextSafe(page, line, {
             x: cardX + 14,
             y: pointY,
             size: 8.2,
@@ -106,7 +106,7 @@ export async function annotatePdfWithNotes(params: {
         color: rgb(1, 0.98, 0.85),
         opacity: 0.92,
       });
-      page.drawText('메모: 시험 전 이 포인트만 빠르게 복습', {
+      drawTextSafe(page, 'Memo: quick review before exam', {
         x: cardX + 14,
         y: y - 20,
         size: 7.6,
@@ -119,7 +119,7 @@ export async function annotatePdfWithNotes(params: {
     const lines = noteLines;
     let lineCursor = 0;
     for (const line of lines) {
-      page.drawText(line, {
+      drawTextSafe(page, line, {
         x: cardX + 12,
         y,
         size: 8.5,
@@ -146,8 +146,8 @@ export async function annotatePdfWithNotes(params: {
   for (const visual of params.visuals.slice(0, 3)) {
     const page = doc.addPage([842, 595]);
     const { width, height } = page.getSize();
-    page.drawText(visual.title, { x: 40, y: height - 40, size: 20, font: fontBold, color: rgb(0.1, 0.1, 0.15) });
-    page.drawText(visual.caption, { x: 40, y: height - 64, size: 10, font, color: rgb(0.35, 0.36, 0.42), maxWidth: width - 80 });
+    drawTextSafe(page, visual.title, { x: 40, y: height - 40, size: 20, font: fontBold, color: rgb(0.1, 0.1, 0.15) });
+    drawTextSafe(page, visual.caption, { x: 40, y: height - 64, size: 10, font, color: rgb(0.35, 0.36, 0.42), maxWidth: width - 80 });
 
     if (visual.kind === 'graph' && visual.graph) drawGraph(page, visual, font, fontBold);
     if (visual.kind === 'timeline' && visual.timeline) drawTimeline(page, visual, font, fontBold);
@@ -217,7 +217,7 @@ function insertContinuationNotePages(params: {
       opacity: 0.98,
     });
 
-    page.drawText(`추가 필기 · 원본 ${params.sourcePage}페이지`, {
+    drawTextSafe(page, `Extra Note · Source page ${params.sourcePage}`, {
       x: 42,
       y: height - 42,
       size: 14,
@@ -225,7 +225,7 @@ function insertContinuationNotePages(params: {
       color: rgb(0.16, 0.24, 0.55),
     });
 
-    page.drawText(`자동 확장 페이지 ${pageCount}`, {
+    drawTextSafe(page, `Auto expanded page ${pageCount}`, {
       x: width - 190,
       y: height - 42,
       size: 10,
@@ -235,7 +235,7 @@ function insertContinuationNotePages(params: {
 
     let y = height - 68;
     while (cursor < params.lines.length) {
-      page.drawText(params.lines[cursor], {
+      drawTextSafe(page, params.lines[cursor], {
         x: 42,
         y,
         size: 10.5,
@@ -276,14 +276,14 @@ function drawGraph(page: any, visual: VisualSpec, font: any, fontBold: any) {
       const flipped = { x: px, y: py };
       page.drawCircle({ x: flipped.x, y: flipped.y, size: 2.5, color: idx % 2 === 0 ? rgb(0.14, 0.35, 0.8) : rgb(0.8, 0.25, 0.25) });
       if (prev) page.drawLine({ start: prev, end: flipped, thickness: 1.8, color: idx % 2 === 0 ? rgb(0.14, 0.35, 0.8) : rgb(0.8, 0.25, 0.25) });
-      if (p.label) page.drawText(p.label, { x: flipped.x + 4, y: flipped.y + 4, size: 8, font, color: rgb(0.33, 0.33, 0.4) });
+      if (p.label) drawTextSafe(page, p.label, { x: flipped.x + 4, y: flipped.y + 4, size: 8, font, color: rgb(0.33, 0.33, 0.4) });
       prev = flipped;
     }
-    page.drawText(series.label, { x: box.x + 470, y: box.y + box.h - 24 - idx * 14, size: 9, font: fontBold, color: idx % 2 === 0 ? rgb(0.14, 0.35, 0.8) : rgb(0.8, 0.25, 0.25) });
+    drawTextSafe(page, series.label, { x: box.x + 470, y: box.y + box.h - 24 - idx * 14, size: 9, font: fontBold, color: idx % 2 === 0 ? rgb(0.14, 0.35, 0.8) : rgb(0.8, 0.25, 0.25) });
   });
 
-  page.drawText(visual.graph!.xLabel, { x: box.x + box.w / 2 - 20, y: box.y + 8, size: 10, font: fontBold, color: rgb(0.22, 0.22, 0.28) });
-  page.drawText(visual.graph!.yLabel, { x: box.x + 6, y: box.y + box.h / 2, size: 10, font: fontBold, color: rgb(0.22, 0.22, 0.28) });
+  drawTextSafe(page, visual.graph!.xLabel, { x: box.x + box.w / 2 - 20, y: box.y + 8, size: 10, font: fontBold, color: rgb(0.22, 0.22, 0.28) });
+  drawTextSafe(page, visual.graph!.yLabel, { x: box.x + 6, y: box.y + box.h / 2, size: 10, font: fontBold, color: rgb(0.22, 0.22, 0.28) });
 }
 
 function drawTimeline(page: any, visual: VisualSpec, font: any, fontBold: any) {
@@ -295,9 +295,9 @@ function drawTimeline(page: any, visual: VisualSpec, font: any, fontBold: any) {
   events.forEach((event, i) => {
     const y = startY - i * gap;
     page.drawCircle({ x, y, size: 6, color: rgb(0.25, 0.35, 0.74) });
-    page.drawText(event.year, { x: 40, y: y - 4, size: 11, font: fontBold, color: rgb(0.18, 0.22, 0.34) });
-    page.drawText(event.label, { x: 145, y: y + 6, size: 11, font: fontBold, color: rgb(0.1, 0.1, 0.14), maxWidth: 560 });
-    if (event.detail) page.drawText(event.detail, { x: 145, y: y - 10, size: 9, font, color: rgb(0.38, 0.39, 0.45), maxWidth: 560 });
+    drawTextSafe(page, event.year, { x: 40, y: y - 4, size: 11, font: fontBold, color: rgb(0.18, 0.22, 0.34) });
+    drawTextSafe(page, event.label, { x: 145, y: y + 6, size: 11, font: fontBold, color: rgb(0.1, 0.1, 0.14), maxWidth: 560 });
+    if (event.detail) drawTextSafe(page, event.detail, { x: 145, y: y - 10, size: 9, font, color: rgb(0.38, 0.39, 0.45), maxWidth: 560 });
   });
 }
 
@@ -311,13 +311,13 @@ function drawTable(page: any, visual: VisualSpec, font: any, fontBold: any) {
   const rowH = 38;
   cols.forEach((col, i) => {
     page.drawRectangle({ x: startX + i * colW, y: startY, width: colW, height: rowH, borderColor: rgb(0.75, 0.8, 0.9), borderWidth: 1, color: rgb(0.95, 0.97, 1) });
-    page.drawText(col, { x: startX + i * colW + 8, y: startY + 14, size: 10, font: fontBold, color: rgb(0.16, 0.22, 0.42), maxWidth: colW - 16 });
+    drawTextSafe(page, col, { x: startX + i * colW + 8, y: startY + 14, size: 10, font: fontBold, color: rgb(0.16, 0.22, 0.42), maxWidth: colW - 16 });
   });
   rows.forEach((row, r) => {
     row.forEach((cell, i) => {
       const y = startY - (r + 1) * rowH;
       page.drawRectangle({ x: startX + i * colW, y, width: colW, height: rowH, borderColor: rgb(0.82, 0.85, 0.9), borderWidth: 1 });
-      page.drawText(cell, { x: startX + i * colW + 8, y: y + 12, size: 9, font, color: rgb(0.1, 0.1, 0.14), maxWidth: colW - 16 });
+      drawTextSafe(page, cell, { x: startX + i * colW + 8, y: y + 12, size: 9, font, color: rgb(0.1, 0.1, 0.14), maxWidth: colW - 16 });
     });
   });
 }
@@ -334,7 +334,7 @@ function drawFlowchart(page: any, visual: VisualSpec, font: any, fontBold: any) 
     const x = startX + (i % 2) * 280;
     const y = startY - Math.floor(i / 2) * gapY;
     page.drawRectangle({ x, y, width: boxW, height: boxH, borderColor: rgb(0.72, 0.8, 0.95), borderWidth: 1.2, color: rgb(0.97, 0.98, 1) });
-    page.drawText(node.label, { x: x + 10, y: y + 22, size: 10, font: fontBold, color: rgb(0.13, 0.15, 0.22), maxWidth: boxW - 20 });
+    drawTextSafe(page, node.label, { x: x + 10, y: y + 22, size: 10, font: fontBold, color: rgb(0.13, 0.15, 0.22), maxWidth: boxW - 20 });
   });
 
   visual.flowchart!.edges.slice(0, 6).forEach((edge) => {
@@ -346,8 +346,22 @@ function drawFlowchart(page: any, visual: VisualSpec, font: any, fontBold: any) 
     const tx = startX + (to % 2) * 280 + boxW / 2;
     const ty = startY - Math.floor(to / 2) * gapY + boxH;
     page.drawLine({ start: { x: fx, y: fy }, end: { x: tx, y: ty }, thickness: 1.2, color: rgb(0.45, 0.5, 0.6) });
-    if (edge.label) page.drawText(edge.label, { x: (fx + tx) / 2 + 4, y: (fy + ty) / 2 + 4, size: 8, font, color: rgb(0.4, 0.4, 0.46) });
+    if (edge.label) drawTextSafe(page, edge.label, { x: (fx + tx) / 2 + 4, y: (fy + ty) / 2 + 4, size: 8, font, color: rgb(0.4, 0.4, 0.46) });
   });
+}
+
+function toWinAnsiSafeText(input: string) {
+  return (input || '')
+    .normalize('NFKD')
+    .replace(/[^\x20-\x7E\xA0-\xFF]/g, '?')
+    .replace(/\?{3,}/g, '??')
+    .trim();
+}
+
+function drawTextSafe(page: any, text: string, options: any) {
+  const safeText = toWinAnsiSafeText(text);
+  if (!safeText) return;
+  page.drawText(safeText, options);
 }
 
 function wrapText(text: string, maxLen: number) {
