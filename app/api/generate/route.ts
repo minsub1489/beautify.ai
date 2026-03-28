@@ -12,6 +12,7 @@ import { beginAiUsage, failAiUsage, finalizeAiUsage } from '@/lib/billing/usage'
 import { assertWithinRateLimit } from '@/lib/rate-limit';
 
 export const maxDuration = 60;
+const LOW_TOKEN_MODE = (process.env.AI_LOW_TOKEN_MODE || '').toLowerCase() === 'true';
 
 function inferTitleFromFiles(pdfName: string, fallbackName?: string) {
   const source = pdfName || fallbackName || '새 프로젝트';
@@ -256,7 +257,7 @@ export async function POST(req: Request) {
     const subjectBaseText = uploadedPdfTexts.join('\n') || allPdfText;
     const transcriptBaseText = uploadedTranscripts.join('\n') || allTranscriptText;
 
-    if (subjectBaseText || transcriptBaseText) {
+    if (!LOW_TOKEN_MODE && (subjectBaseText || transcriptBaseText)) {
       try {
         const inferred = await inferSubjectFromMaterials({
           title: projectWithAssets.title,

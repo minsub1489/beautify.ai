@@ -1,6 +1,8 @@
 import { GEMINI_MODELS, generateGeminiJson, toUserFacingGeminiError } from './openai';
 import type { GenerationResult } from './types';
 
+const LOW_TOKEN_MODE = (process.env.AI_LOW_TOKEN_MODE || '').toLowerCase() === 'true';
+
 function toInt(value: string | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
@@ -45,8 +47,8 @@ export async function inferSubjectFromMaterials(payload: {
   transcriptText?: string;
 }) {
   try {
-    const subjectPdfMax = toInt(process.env.AI_SUBJECT_PDF_MAX_CHARS, 7000);
-    const subjectTranscriptMax = toInt(process.env.AI_SUBJECT_TRANSCRIPT_MAX_CHARS, 3000);
+    const subjectPdfMax = toInt(process.env.AI_SUBJECT_PDF_MAX_CHARS, LOW_TOKEN_MODE ? 2400 : 7000);
+    const subjectTranscriptMax = toInt(process.env.AI_SUBJECT_TRANSCRIPT_MAX_CHARS, LOW_TOKEN_MODE ? 1200 : 3000);
 
     return await generateGeminiJson<{
       subject: string;
@@ -94,10 +96,10 @@ export async function generateAnnotatedNotes(payload: {
   notionText?: string;
   customNotes?: string;
 }): Promise<GenerationResult> {
-  const generatePdfMax = toInt(process.env.AI_GENERATE_PDF_MAX_CHARS, 13000);
-  const generateTranscriptMax = toInt(process.env.AI_GENERATE_TRANSCRIPT_MAX_CHARS, 6000);
-  const generateNotionMax = toInt(process.env.AI_GENERATE_NOTION_MAX_CHARS, 5000);
-  const generateNotesMax = toInt(process.env.AI_GENERATE_NOTES_MAX_CHARS, 5000);
+  const generatePdfMax = toInt(process.env.AI_GENERATE_PDF_MAX_CHARS, LOW_TOKEN_MODE ? 4200 : 13000);
+  const generateTranscriptMax = toInt(process.env.AI_GENERATE_TRANSCRIPT_MAX_CHARS, LOW_TOKEN_MODE ? 1800 : 6000);
+  const generateNotionMax = toInt(process.env.AI_GENERATE_NOTION_MAX_CHARS, LOW_TOKEN_MODE ? 1400 : 5000);
+  const generateNotesMax = toInt(process.env.AI_GENERATE_NOTES_MAX_CHARS, LOW_TOKEN_MODE ? 1400 : 5000);
 
   const compactedPdf = compactContext(payload.pdfText, generatePdfMax);
   const compactedTranscript = compactContext(payload.transcriptText ?? '', generateTranscriptMax);
@@ -116,9 +118,9 @@ export async function generateAnnotatedNotes(payload: {
 반드시 지켜라:
 1) 출력은 JSON만.
 2) summary에는 자료의 과목/주제를 1문장으로 명확히 드러내라.
-3) notesByPage는 페이지별로 2~5줄 길이의 한국어 필기.
+3) notesByPage는 페이지별로 ${LOW_TOKEN_MODE ? '1~3줄' : '2~5줄'} 길이의 한국어 필기.
 4) examFocus는 시험에 나올 가능성이 높은 포인트.
-5) visuals는 최대 3개.
+5) visuals는 최대 ${LOW_TOKEN_MODE ? '1개' : '3개'}.
 6) 수학/통계/선형대수/미적분이면 graph를 우선 고려.
 7) 역사면 timeline을 우선 고려.
 8) 코딩/딥러닝/AI/CS 계열이면 flowchart나 table을 최소 1개 이상 적극 사용.
@@ -128,7 +130,7 @@ export async function generateAnnotatedNotes(payload: {
 12) 코딩/AI 계열이면 개념 정의뿐 아니라 "입력→처리→출력", 함수 역할, 모델 흐름, 학습 포인트, 자주 틀리는 부분을 강조하라.
 13) 딥러닝/AI 계열이면 수식이 있더라도 직관, 손실함수 의미, 역전파/학습 흐름, 모델 비교를 학생이 이해하기 쉽게 바꿔라.
 14) 사용자가 메모를 채팅처럼 여러 개 넣었으면 각 메모를 모두 반영하라.
-15) reviewQuestions는 최소 8개 이상 만들고, 반드시 핵심 개념/비교/적용/함정 포인트 위주로 출제해라.
+15) reviewQuestions는 최소 ${LOW_TOKEN_MODE ? '4개' : '8개'} 이상 만들고, 반드시 핵심 개념/비교/적용/함정 포인트 위주로 출제해라.
 16) answer는 1~3문장으로 간결히 작성해라.
 17) hint는 한 줄 힌트로 작성하고, 답을 그대로 반복하지 말아라.
 
@@ -158,7 +160,7 @@ reviewQuestions: [{question:string, answer:string, hint?:string}]
 
   try {
     return await generateGeminiJson<GenerationResult>({
-      model: GEMINI_MODELS.reasoning,
+      model: LOW_TOKEN_MODE ? GEMINI_MODELS.text : GEMINI_MODELS.reasoning,
       prompt,
       schema: {
         type: 'object',
