@@ -370,6 +370,11 @@ export function WorkspaceShell({
     }
     return basePreviewPdfUrl;
   }, [basePreviewPdfUrl, translatedAssetId, translationMode]);
+  const pdfEditPreviewLabel = useMemo(() => {
+    if (pdfPageLoading) return 'PDF 페이지를 불러오는 중...';
+    if (!pdfPageItems.length) return '편집할 페이지가 없습니다.';
+    return `총 ${currentPdfPageCount}페이지 · 카드를 드래그해서 순서를 바꾸고 X로 제거하세요.`;
+  }, [currentPdfPageCount, pdfPageItems.length, pdfPageLoading]);
 
   const SIDEBAR_MIN = 220;
   const SIDEBAR_MAX = 520;
@@ -1346,9 +1351,101 @@ export function WorkspaceShell({
             ) : null}
 
             {previewPdfUrl ? (
-              <div className="previewFrameWrap">
-                <iframe className="previewFrame" src={previewPdfUrl} title="PDF 미리보기" />
-              </div>
+              pdfEditMode ? (
+                <div className="previewEditWrap">
+                  <div className="previewEditToolbar">
+                    <div className="muted">{pdfEditPreviewLabel}</div>
+                    <div className="row">
+                      <button
+                        type="button"
+                        className="button secondary"
+                        onClick={resetPdfPageEdits}
+                        disabled={pdfPageLoading || pdfPageSaving || !pdfPageItems.length || !pdfPageDirty}
+                      >
+                        초기화
+                      </button>
+                      <button
+                        type="button"
+                        className="button"
+                        onClick={() => void applyPdfPageEdits()}
+                        disabled={pdfPageLoading || pdfPageSaving || !pdfPageItems.length || !pdfPageDirty}
+                      >
+                        {pdfPageSaving ? '적용 중...' : '변경 적용'}
+                      </button>
+                    </div>
+                  </div>
+                  {pdfPageStatus ? <div className="muted">{pdfPageStatus}</div> : null}
+                  {pdfPageLoading ? (
+                    <div className="pageEditorEmpty previewEditEmpty">PDF 페이지를 불러오는 중...</div>
+                  ) : pdfPageItems.length ? (
+                    <div className="previewEditGrid">
+                      {pdfPageItems.map((item, index) => (
+                        <div
+                          key={item.id}
+                          className={`previewEditCard ${draggingPdfPageId === item.id ? 'dragging' : ''} ${dragOverPdfPageId === item.id ? 'dragOver' : ''}`}
+                          draggable={!pdfPageSaving}
+                          onDragStart={(event) => {
+                            event.dataTransfer.effectAllowed = 'move';
+                            event.dataTransfer.setData('text/plain', item.id);
+                            setDraggingPdfPageId(item.id);
+                            setDragOverPdfPageId(item.id);
+                          }}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            if (draggingPdfPageId && draggingPdfPageId !== item.id) {
+                              setDragOverPdfPageId(item.id);
+                            }
+                          }}
+                          onDragLeave={() => {
+                            if (dragOverPdfPageId === item.id) setDragOverPdfPageId('');
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            const sourceId = event.dataTransfer.getData('text/plain') || draggingPdfPageId;
+                            movePdfPageById(sourceId, item.id);
+                            resetPdfDragState();
+                          }}
+                          onDragEnd={resetPdfDragState}
+                        >
+                          <div className="previewEditCardViewport">
+                            <iframe
+                              className="previewEditCardFrame"
+                              src={`${previewPdfUrl}#page=${item.sourcePage}&view=FitH`}
+                              title={`PDF ${item.sourcePage}페이지 미리보기`}
+                            />
+                            <div className="previewEditCardOverlay" />
+                          </div>
+                          <button
+                            type="button"
+                            className="pageEditorRemove previewEditCardRemove"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              deletePdfPageById(item.id);
+                            }}
+                            disabled={pdfPageSaving || pdfPageItems.length <= 1}
+                            aria-label={`${index + 1}페이지 제거`}
+                            title="페이지 제거"
+                          >
+                            <X size={14} />
+                          </button>
+                          <div className="previewEditCardOrder">{index + 1}</div>
+                          <div className="previewEditCardMeta">
+                            <div className="previewEditCardTitle">현재 {index + 1}페이지</div>
+                            <div className="previewEditCardSource">원본 {item.sourcePage}페이지</div>
+                          </div>
+                          <div className="previewEditCardHint">여기를 잡고 드래그</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="pageEditorEmpty previewEditEmpty">편집할 PDF 페이지를 찾지 못했습니다.</div>
+                  )}
+                </div>
+              ) : (
+                <div className="previewFrameWrap">
+                  <iframe className="previewFrame" src={previewPdfUrl} title="PDF 미리보기" />
+                </div>
+              )
             ) : (
               <div className="dropZone previewEmpty">
                 <UploadCloud size={26} />
@@ -1469,111 +1566,6 @@ export function WorkspaceShell({
                         </div>
                       ))}
                     </div>
-                  </div>
-                ) : null}
-
-                {latestPdfAsset ? (
-                  <div className="pageEditorPanel">
-                    <div className="pageEditorHeader">
-                      <div>
-                        <div className="sectionTitle">PDF 페이지 편집</div>
-                        <div className="muted">편집 버튼을 누르면 페이지 카드를 드래그해서 순서를 바꾸고, 오른쪽 위 X로 바로 제거할 수 있습니다.</div>
-                      </div>
-                      <div className="pageEditorHeaderSide">
-                        <div className="pageEditorCountBadge">총 {currentPdfPageCount}페이지</div>
-                        <button
-                          type="button"
-                          className={`button secondary ${pdfEditMode ? 'previewModeButtonActive' : ''}`}
-                          onClick={() => setPdfEditMode((prev) => !prev)}
-                          disabled={pdfPageLoading || pdfPageSaving}
-                        >
-                          <Pencil size={16} />
-                          {pdfEditMode ? '편집 닫기' : '편집 모드'}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="pageEditorToolbar">
-                      <div className="muted">{pdfEditMode ? '페이지 카드를 끌어서 원하는 위치에 놓으세요.' : '편집 모드를 열면 페이지별 카드가 나타납니다.'}</div>
-                      <div className="row">
-                        <button
-                          type="button"
-                          className="button secondary"
-                          onClick={resetPdfPageEdits}
-                          disabled={pdfPageLoading || pdfPageSaving || !pdfPageItems.length || !pdfPageDirty}
-                        >
-                          초기화
-                        </button>
-                        <button
-                          type="button"
-                          className="button"
-                          onClick={() => void applyPdfPageEdits()}
-                          disabled={pdfPageLoading || pdfPageSaving || !pdfPageItems.length || !pdfPageDirty}
-                        >
-                          {pdfPageSaving ? '적용 중...' : '변경 적용'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {pdfPageLoading ? (
-                      <div className="pageEditorEmpty">PDF 페이지를 불러오는 중...</div>
-                    ) : !pdfEditMode ? (
-                      <div className="pageEditorEmpty">편집 모드를 열면 페이지 카드가 나타나고, 드래그앤드롭과 X 삭제가 가능해집니다.</div>
-                    ) : pdfPageItems.length ? (
-                      <div className="pageEditorGrid">
-                        {pdfPageItems.map((item, index) => (
-                          <div
-                            key={item.id}
-                            className={`pageEditorCard ${draggingPdfPageId === item.id ? 'dragging' : ''} ${dragOverPdfPageId === item.id ? 'dragOver' : ''}`}
-                            draggable={!pdfPageSaving}
-                            onDragStart={(event) => {
-                              event.dataTransfer.effectAllowed = 'move';
-                              event.dataTransfer.setData('text/plain', item.id);
-                              setDraggingPdfPageId(item.id);
-                              setDragOverPdfPageId(item.id);
-                            }}
-                            onDragOver={(event) => {
-                              event.preventDefault();
-                              if (draggingPdfPageId && draggingPdfPageId !== item.id) {
-                                setDragOverPdfPageId(item.id);
-                              }
-                            }}
-                            onDragLeave={() => {
-                              if (dragOverPdfPageId === item.id) setDragOverPdfPageId('');
-                            }}
-                            onDrop={(event) => {
-                              event.preventDefault();
-                              const sourceId = event.dataTransfer.getData('text/plain') || draggingPdfPageId;
-                              movePdfPageById(sourceId, item.id);
-                              resetPdfDragState();
-                            }}
-                            onDragEnd={resetPdfDragState}
-                          >
-                            <button
-                              type="button"
-                              className="pageEditorRemove"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                deletePdfPageById(item.id);
-                              }}
-                              disabled={pdfPageSaving || pdfPageItems.length <= 1}
-                              aria-label={`${index + 1}페이지 제거`}
-                              title="페이지 제거"
-                            >
-                              <X size={14} />
-                            </button>
-                            <div className="pageEditorCardIndex">{index + 1}</div>
-                            <div className="pageEditorCardTitle">현재 {index + 1}페이지</div>
-                            <div className="pageEditorCardMeta">원본 {item.sourcePage}페이지</div>
-                            <div className="pageEditorCardHint">드래그해서 위치 이동</div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="pageEditorEmpty">편집할 PDF 페이지를 찾지 못했습니다.</div>
-                    )}
-
-                    {pdfPageStatus ? <div className="muted">{pdfPageStatus}</div> : null}
                   </div>
                 ) : null}
 

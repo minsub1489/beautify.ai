@@ -222,6 +222,138 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 .previewHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .previewFrameWrap { border: 1px solid rgba(255,255,255,0.66); border-radius: 18px; overflow: hidden; min-height: 540px; background: rgba(255,255,255,0.88); box-shadow: inset 0 0 0 1px rgba(130, 103, 255, 0.08); }
 .previewFrame { width: 100%; height: 72vh; min-height: 540px; border: 0; }
+.previewEditWrap {
+  border: 1px solid rgba(236,72,153,0.14);
+  border-radius: 18px;
+  min-height: 540px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(255,245,250,0.92) 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+}
+.previewEditToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.previewEditGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+.previewEditCard {
+  position: relative;
+  min-height: 236px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(236,72,153,0.14);
+  background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,244,249,0.98) 100%);
+  box-shadow: 0 12px 28px rgba(236, 72, 153, 0.08);
+  cursor: grab;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+.previewEditCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(236, 72, 153, 0.14);
+}
+.previewEditCard.dragging {
+  opacity: 0.58;
+  transform: scale(0.985);
+}
+.previewEditCard.dragOver {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+.previewEditCardViewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.previewEditCardFrame {
+  width: 220%;
+  height: 220%;
+  border: 0;
+  transform: scale(0.46);
+  transform-origin: top left;
+  pointer-events: none;
+  opacity: 0.34;
+  filter: saturate(0.88) contrast(0.96);
+}
+.previewEditCardOverlay {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.56) 100%),
+    linear-gradient(135deg, rgba(255,255,255,0.16) 0%, rgba(255,240,248,0.1) 100%);
+  pointer-events: none;
+}
+.previewEditCardRemove {
+  z-index: 3;
+}
+.previewEditCardOrder {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.9);
+  color: #2563eb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 800;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.12);
+}
+.previewEditCardMeta {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.84);
+  backdrop-filter: blur(10px);
+  padding: 10px 12px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+.previewEditCardTitle {
+  font-size: 14px;
+  font-weight: 800;
+  color: #132a63;
+}
+.previewEditCardSource {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #51607f;
+}
+.previewEditCardHint {
+  position: absolute;
+  left: 12px;
+  top: 58px;
+  z-index: 2;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.76);
+  color: #7a4f67;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.previewEditEmpty {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .previewEmpty { min-height: 540px; }
 .liveNotePanel { border: 1px solid rgba(236,72,153,0.18); background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,241,247,0.94) 100%); border-radius: 16px; padding: 12px 14px; }
 .liveNoteLine { color: #1f2f63; font-size: 14px; line-height: 1.6; }
@@ -388,6 +520,9 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   .pageEditorToolbar { flex-direction: column; align-items: stretch; }
   .pageEditorItemMain { align-items: flex-start; }
   .previewFrame { height: 62vh; min-height: 420px; }
+  .previewEditWrap { min-height: 420px; }
+  .previewEditToolbar { align-items: stretch; }
+  .previewEditGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .previewFrameWrap, .previewEmpty, .previewCard, .chatPanel { min-height: auto; }
   .sidebarToggleFixed { top: 12px; left: 12px; }
   .sidebarToggleTitleLeft { top: 20px; left: 18px; }
@@ -1073,6 +1208,54 @@ pre {
   background: rgba(11, 17, 26, 0.96);
   border-color: rgba(148, 163, 184, 0.14);
   box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.06);
+}
+
+[data-theme='dark'] .previewEditWrap {
+  background: linear-gradient(180deg, rgba(16, 24, 37, 0.96) 0%, rgba(11, 17, 28, 0.98) 100%);
+  border-color: rgba(95, 126, 170, 0.2);
+}
+
+[data-theme='dark'] .previewEditCard {
+  background: linear-gradient(180deg, rgba(20, 29, 43, 0.96) 0%, rgba(13, 20, 31, 0.98) 100%);
+  border-color: rgba(148, 163, 184, 0.14);
+  box-shadow: 0 16px 30px rgba(2, 6, 23, 0.24);
+}
+
+[data-theme='dark'] .previewEditCard:hover {
+  box-shadow: 0 18px 34px rgba(2, 6, 23, 0.34);
+}
+
+[data-theme='dark'] .previewEditCard.dragOver {
+  border-color: #7aa2ff;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.16);
+}
+
+[data-theme='dark'] .previewEditCardFrame {
+  opacity: 0.26;
+  filter: grayscale(0.12) brightness(0.92) contrast(0.98);
+}
+
+[data-theme='dark'] .previewEditCardOverlay {
+  background:
+    linear-gradient(180deg, rgba(10,14,22,0.2) 0%, rgba(9,13,20,0.62) 100%),
+    linear-gradient(135deg, rgba(56, 189, 248, 0.06) 0%, rgba(244, 114, 182, 0.05) 100%);
+}
+
+[data-theme='dark'] .previewEditCardOrder,
+[data-theme='dark'] .previewEditCardMeta,
+[data-theme='dark'] .previewEditCardHint {
+  background: rgba(15, 23, 35, 0.78);
+  color: #dbeafe;
+  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.26);
+}
+
+[data-theme='dark'] .previewEditCardTitle {
+  color: #edf3ff;
+}
+
+[data-theme='dark'] .previewEditCardSource,
+[data-theme='dark'] .previewEditCardHint {
+  color: #b7c4d8;
 }
 
 [data-theme='dark'] .previewDropOverlay {
