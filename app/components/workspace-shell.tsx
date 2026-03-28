@@ -68,6 +68,8 @@ type WrongAnswerNote = {
   hint?: string;
 };
 
+type QuizAnswerStatus = 'unanswered' | 'correct' | 'wrong';
+
 function sanitizeText(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
 }
@@ -193,6 +195,12 @@ function isQuizAnswerCorrect(item: QuizItem, userAnswer: string) {
   return normalizedCorrect.includes(normalizedUser) || normalizedUser.includes(normalizedCorrect);
 }
 
+function getQuizAnswerStatus(item: QuizItem | undefined, userAnswer: string) {
+  if (!item) return 'unanswered' as const;
+  if (!userAnswer.trim()) return 'unanswered' as const;
+  return isQuizAnswerCorrect(item, userAnswer) ? 'correct' as const : 'wrong' as const;
+}
+
 export function WorkspaceShell({
   projects,
   selectedProject,
@@ -235,6 +243,7 @@ export function WorkspaceShell({
   const [wrongNotes, setWrongNotes] = useState<WrongAnswerNote[]>([]);
   const [retryQuizMode, setRetryQuizMode] = useState(false);
   const [retryQuizItems, setRetryQuizItems] = useState<QuizItem[]>([]);
+  const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
   const [quizAutoGenerating, setQuizAutoGenerating] = useState(false);
   const [quizAutoStatus, setQuizAutoStatus] = useState('');
   const [quizAutoTriggeredFor, setQuizAutoTriggeredFor] = useState('');
@@ -261,6 +270,11 @@ export function WorkspaceShell({
 
   const quizItems = useMemo(() => parseQuizItems(selectedProject?.lastRun?.questionsJson), [selectedProject?.lastRun?.questionsJson]);
   const activeQuizItems = useMemo(() => (retryQuizMode ? retryQuizItems : quizItems), [quizItems, retryQuizItems, retryQuizMode]);
+  const currentQuizItem = activeQuizItems[currentQuizIndex];
+  const currentQuizAnswer = quizAnswers[currentQuizIndex] || '';
+  const currentQuizStatus = getQuizAnswerStatus(currentQuizItem, currentQuizAnswer);
+  const answeredCount = activeQuizItems.filter((_, idx) => (quizAnswers[idx] || '').trim()).length;
+  const remainingCount = Math.max(0, activeQuizItems.length - answeredCount);
   const hasPdfAsset = useMemo(() => Boolean(selectedProject?.assets?.some((asset) => asset.kind === 'pdf')), [selectedProject?.assets]);
   const latestPdfAsset = useMemo(() => {
     if (!selectedProject?.assets?.length) return null;
@@ -378,10 +392,21 @@ export function WorkspaceShell({
     setWrongNotes([]);
     setRetryQuizMode(false);
     setRetryQuizItems([]);
+    setCurrentQuizIndex(0);
     setQuizAutoGenerating(false);
     setQuizAutoStatus('');
     setQuizAutoTriggeredFor('');
   }, [selectedProject?.id, selectedProject?.lastRun?.questionsJson]);
+
+  useEffect(() => {
+    if (!activeQuizItems.length) {
+      setCurrentQuizIndex(0);
+      return;
+    }
+    if (currentQuizIndex > activeQuizItems.length - 1) {
+      setCurrentQuizIndex(activeQuizItems.length - 1);
+    }
+  }, [activeQuizItems.length, currentQuizIndex]);
 
   useEffect(() => {
     let active = true;
@@ -688,7 +713,7 @@ export function WorkspaceShell({
     setQuizAnswers((prev) => ({ ...prev, [index]: value }));
   }
 
-  function submitQuiz() {
+  function finishQuiz() {
     const wrong: WrongAnswerNote[] = [];
     activeQuizItems.forEach((item, idx) => {
       const userAnswer = (quizAnswers[idx] || '').trim();
@@ -710,6 +735,18 @@ export function WorkspaceShell({
     setQuizSubmitted(true);
   }
 
+  function goToNextQuiz() {
+    if (currentQuizIndex >= activeQuizItems.length - 1) {
+      finishQuiz();
+      return;
+    }
+    setCurrentQuizIndex((prev) => Math.min(prev + 1, activeQuizItems.length - 1));
+  }
+
+  function goToPreviousQuiz() {
+    setCurrentQuizIndex((prev) => Math.max(prev - 1, 0));
+  }
+
   function startWrongRetryExam() {
     const wrongSet = new Set(wrongNotes.map((note) => note.question));
     const variants = quizItems
@@ -719,6 +756,7 @@ export function WorkspaceShell({
     setRetryQuizMode(true);
     setQuizSubmitted(false);
     setQuizAnswers({});
+    setCurrentQuizIndex(0);
   }
 
   function resetFullQuiz() {
@@ -726,6 +764,7 @@ export function WorkspaceShell({
     setRetryQuizItems([]);
     setQuizSubmitted(false);
     setQuizAnswers({});
+    setCurrentQuizIndex(0);
   }
 
   async function autoGenerateQuiz() {
@@ -1127,26 +1166,50 @@ export function WorkspaceShell({
                 </div>
 
                 {activeQuizItems.length ? (
-                  <div className="quizList">
-                    {activeQuizItems.map((item, idx) => (
-                      <div key={`${idx}-${item.question}`} className="quizItem">
-                        <div className="quizQ">Q{idx + 1}. {item.question}</div>
-                        <div className="quizMeta">
-                          유형: {item.type === 'mcq' ? '4지선다' : item.type === 'ox' ? 'OX' : '단답형'}
-                        </div>
-                        {item.source ? <div className="quizMeta">출제 근거: {item.source}</div> : null}
-                        <div className="quizHint">힌트: {item.hint || 'PDF에서 해당 개념이 어떤 맥락으로 설명되는지 다시 떠올려 보세요.'}</div>
+                  <div className="quizSingleWrap">
+                    <div className="quizProgressCard">
+                      <div className="quizProgressTop">
+                        <div className="quizProgressCount">문제 {currentQuizIndex + 1} / {activeQuizItems.length}</div>
+                        <div className="quizProgressRemaining">남은 문제 {remainingCount}</div>
+                      </div>
+                      <div className="quizProgressBar">
+                        <div
+                          className="quizProgressFill"
+                          style={{ width: `${activeQuizItems.length ? ((currentQuizIndex + 1) / activeQuizItems.length) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <div className="quizProgressMeta">
+                        입력한 문제 {answeredCount}개
+                      </div>
+                    </div>
 
-                        {item.type === 'mcq' && item.options?.length ? (
+                    {currentQuizItem ? (
+                      <div className="quizItem">
+                        <div className="quizQ">Q{currentQuizIndex + 1}. {currentQuizItem.question}</div>
+                        <div className="quizMeta">
+                          유형: {currentQuizItem.type === 'mcq' ? '4지선다' : currentQuizItem.type === 'ox' ? 'OX' : '단답형'}
+                        </div>
+                        {currentQuizItem.source ? <div className="quizMeta">출제 근거: {currentQuizItem.source}</div> : null}
+                        <div className="quizHint">힌트: {currentQuizItem.hint || 'PDF에서 해당 개념이 어떤 맥락으로 설명되는지 다시 떠올려 보세요.'}</div>
+
+                        <div className={`quizLiveStatus ${currentQuizStatus}`}>
+                          {currentQuizStatus === 'correct'
+                            ? '정답입니다'
+                            : currentQuizStatus === 'wrong'
+                              ? '오답입니다'
+                              : '답을 입력하거나 선택해 보세요'}
+                        </div>
+
+                        {currentQuizItem.type === 'mcq' && currentQuizItem.options?.length ? (
                           <div className="quizChoiceList">
-                            {item.options.map((option, optionIndex) => {
-                              const selected = (quizAnswers[idx] || '') === option;
+                            {currentQuizItem.options.map((option, optionIndex) => {
+                              const selected = currentQuizAnswer === option;
                               return (
                                 <button
-                                  key={`${item.question}-${optionIndex}`}
+                                  key={`${currentQuizItem.question}-${optionIndex}`}
                                   type="button"
-                                  className={`quizChoice ${selected ? 'selected' : ''}`}
-                                  onClick={() => setQuizAnswer(idx, option)}
+                                  className={`quizChoice ${selected ? 'selected' : ''} ${selected && currentQuizStatus !== 'unanswered' ? currentQuizStatus : ''}`}
+                                  onClick={() => setQuizAnswer(currentQuizIndex, option)}
                                   disabled={quizSubmitted}
                                 >
                                   {optionIndex + 1}. {option}
@@ -1154,16 +1217,16 @@ export function WorkspaceShell({
                               );
                             })}
                           </div>
-                        ) : item.type === 'ox' ? (
+                        ) : currentQuizItem.type === 'ox' ? (
                           <div className="quizChoiceList row">
                             {['O', 'X'].map((option) => {
-                              const selected = (quizAnswers[idx] || '') === option;
+                              const selected = currentQuizAnswer === option;
                               return (
                                 <button
-                                  key={`${item.question}-${option}`}
+                                  key={`${currentQuizItem.question}-${option}`}
                                   type="button"
-                                  className={`quizChoice ${selected ? 'selected' : ''}`}
-                                  onClick={() => setQuizAnswer(idx, option)}
+                                  className={`quizChoice ${selected ? 'selected' : ''} ${selected && currentQuizStatus !== 'unanswered' ? currentQuizStatus : ''}`}
+                                  onClick={() => setQuizAnswer(currentQuizIndex, option)}
                                   disabled={quizSubmitted}
                                 >
                                   {option}
@@ -1173,9 +1236,9 @@ export function WorkspaceShell({
                           </div>
                         ) : (
                           <input
-                            className="input quizInput"
-                            value={quizAnswers[idx] || ''}
-                            onChange={(event) => setQuizAnswer(idx, event.target.value)}
+                            className={`input quizInput ${currentQuizStatus !== 'unanswered' ? `quizInput-${currentQuizStatus}` : ''}`}
+                            value={currentQuizAnswer}
+                            onChange={(event) => setQuizAnswer(currentQuizIndex, event.target.value)}
                             disabled={quizSubmitted}
                             placeholder="정답을 짧게 입력하세요"
                           />
@@ -1183,13 +1246,13 @@ export function WorkspaceShell({
 
                         {quizSubmitted ? (
                           <div className="quizA">
-                            정답: {item.type === 'mcq' && typeof item.correctOptionIndex === 'number' && item.options?.[item.correctOptionIndex]
-                              ? item.options[item.correctOptionIndex]
-                              : item.answer}
+                            정답: {currentQuizItem.type === 'mcq' && typeof currentQuizItem.correctOptionIndex === 'number' && currentQuizItem.options?.[currentQuizItem.correctOptionIndex]
+                              ? currentQuizItem.options[currentQuizItem.correctOptionIndex]
+                              : currentQuizItem.answer}
                           </div>
                         ) : null}
                       </div>
-                    ))}
+                    ) : null}
                   </div>
                 ) : (
                   <div className="dropZone">
@@ -1200,8 +1263,16 @@ export function WorkspaceShell({
 
                 {activeQuizItems.length ? (
                   <div className="quizActions">
-                    <button className="button" type="button" onClick={submitQuiz} disabled={quizSubmitted}>
-                      채점하기
+                    <button className="button secondary" type="button" onClick={goToPreviousQuiz} disabled={quizSubmitted || currentQuizIndex === 0}>
+                      이전 문제
+                    </button>
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={goToNextQuiz}
+                      disabled={quizSubmitted || !currentQuizAnswer.trim()}
+                    >
+                      {currentQuizIndex === activeQuizItems.length - 1 ? '결과 보기' : '다음 문제'}
                     </button>
                     {quizSubmitted && wrongNotes.length ? (
                       <button className="button secondary" type="button" onClick={startWrongRetryExam}>
@@ -1220,7 +1291,7 @@ export function WorkspaceShell({
                   wrongNotes.length ? (
                     <div className="wrongNoteWrap">
                       <div className="sectionTitle">오답노트</div>
-                      <div className="muted">틀린 문제 {wrongNotes.length}개를 바탕으로 다시 연습할 수 있어요.</div>
+                      <div className="muted">틀린 문제 {wrongNotes.length}개, 맞힌 문제 {activeQuizItems.length - wrongNotes.length}개입니다.</div>
                       <div className="wrongNoteList">
                         {wrongNotes.map((note, idx) => (
                           <div key={`${note.question}-${idx}`} className="wrongNoteItem">
