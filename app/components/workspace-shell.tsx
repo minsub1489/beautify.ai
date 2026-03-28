@@ -754,7 +754,7 @@ export function WorkspaceShell({
     if (!selectedProject?.id || quizAutoGenerating) return;
     const triggerKey = `${selectedProject.id}:${latestPdfCreatedAt || 'no-pdf'}`;
     setQuizAutoGenerating(true);
-    setQuizAutoStatus('PDF를 바탕으로 퀴즈를 자동 생성하는 중...');
+    setQuizAutoStatus('PDF 핵심 내용을 분석해 퀴즈를 만드는 중...');
     setQuizAutoTriggeredFor(triggerKey);
     try {
       const formData = new FormData();
@@ -762,7 +762,7 @@ export function WorkspaceShell({
       formData.set('redirectTo', `/?projectId=${selectedProject.id}`);
       formData.set(
         'noteText',
-        '최신 PDF 본문을 실제로 분석해서 한국어 시험 대비 퀴즈를 만들어줘. 각 문제는 자료 근거(source)가 보여야 하고, 단답형/OX/4지선다를 섞어줘.',
+        '최신 PDF 본문을 실제로 분석해서 가장 중요한 내용만 골라 한국어 퀴즈 4~5개를 만들어줘. 각 문제는 자료 근거(source)가 보여야 하고, 단답형/OX/4지선다를 섞어줘.',
       );
       formData.set('customNotes', '');
 
@@ -792,7 +792,7 @@ export function WorkspaceShell({
         return;
       }
 
-      setQuizAutoStatus('퀴즈 생성이 완료되었습니다.');
+      setQuizAutoStatus('PDF 분석 기반 퀴즈가 준비되었습니다.');
       router.refresh();
     } catch {
       setQuizAutoStatus('퀴즈 자동 생성 중 네트워크 오류가 발생했습니다.');
@@ -963,7 +963,7 @@ export function WorkspaceShell({
 
         <div className="workspaceStudio">
           <div
-            className={`card stack previewCard ${workspaceView === 'quiz' ? 'quizCard' : ''}`}
+            className="card stack previewCard"
             onDragEnter={(e) => {
               e.preventDefault();
               setDragging(true);
@@ -1028,144 +1028,6 @@ export function WorkspaceShell({
 
             {translationStatus ? <div className="muted">{translationStatus}</div> : null}
 
-            {workspaceView === 'quiz' ? (
-              <>
-                <div className="quizHeader">
-                  <div className="sectionTitle">시험 대비 퀴즈</div>
-                  {retryQuizMode ? <div className="badge">오답 재시험 모드</div> : null}
-                </div>
-                <div className="quizAutoInline">
-                  <div className="muted">PDF 업로드 후 퀴즈 탭을 열면 자동 생성됩니다.</div>
-                  {quizAutoStatus ? <div className="muted">상태: {quizAutoStatus}</div> : null}
-                  <button
-                    type="button"
-                    className="button secondary"
-                    disabled={quizAutoGenerating || !selectedProject?.id || !hasPdfAsset}
-                    onClick={() => {
-                      setQuizAutoTriggeredFor('');
-                      void autoGenerateQuiz();
-                    }}
-                  >
-                    {quizAutoGenerating ? '퀴즈 생성 중...' : '퀴즈 다시 생성'}
-                  </button>
-                </div>
-
-                {selectedProject?.lastRun?.summary ? (
-                  <div className="quizSummary">{selectedProject.lastRun.summary}</div>
-                ) : null}
-
-                {activeQuizItems.length ? (
-                  <div className="quizList">
-                    {activeQuizItems.map((item, idx) => (
-                      <div key={`${idx}-${item.question}`} className="quizItem">
-                        <div className="quizQ">Q{idx + 1}. {item.question}</div>
-                        <div className="quizMeta">
-                          유형: {item.type === 'mcq' ? '4지선다' : item.type === 'ox' ? 'OX' : '단답형'}
-                        </div>
-                        {item.source ? <div className="quizMeta">출제 근거: {item.source}</div> : null}
-                        <div className="quizHint">힌트: {item.hint || '핵심 키워드 3개를 먼저 적고, 개념 간 차이를 연결해 보세요.'}</div>
-
-                        {item.type === 'mcq' && item.options?.length ? (
-                          <div className="quizChoiceList">
-                            {item.options.map((option, optionIndex) => {
-                              const selected = (quizAnswers[idx] || '') === option;
-                              return (
-                                <button
-                                  key={`${item.question}-${optionIndex}`}
-                                  type="button"
-                                  className={`quizChoice ${selected ? 'selected' : ''}`}
-                                  onClick={() => setQuizAnswer(idx, option)}
-                                  disabled={quizSubmitted}
-                                >
-                                  {optionIndex + 1}. {option}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : item.type === 'ox' ? (
-                          <div className="quizChoiceList row">
-                            {['O', 'X'].map((option) => {
-                              const selected = (quizAnswers[idx] || '') === option;
-                              return (
-                                <button
-                                  key={`${item.question}-${option}`}
-                                  type="button"
-                                  className={`quizChoice ${selected ? 'selected' : ''}`}
-                                  onClick={() => setQuizAnswer(idx, option)}
-                                  disabled={quizSubmitted}
-                                >
-                                  {option}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <input
-                            className="input quizInput"
-                            value={quizAnswers[idx] || ''}
-                            onChange={(event) => setQuizAnswer(idx, event.target.value)}
-                            disabled={quizSubmitted}
-                            placeholder="정답을 간단히 입력하세요"
-                          />
-                        )}
-
-                        {quizSubmitted ? (
-                          <div className="quizA">
-                            정답: {item.type === 'mcq' && typeof item.correctOptionIndex === 'number' && item.options?.[item.correctOptionIndex]
-                              ? item.options[item.correctOptionIndex]
-                              : item.answer}
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="dropZone">
-                    <div className="dropZoneTitle">퀴즈가 아직 없습니다</div>
-                    <div className="muted">PDF 업로드 후 퀴즈 탭을 열면, PDF 분석 기반의 한국어 시험 대비 퀴즈가 자동 생성됩니다.</div>
-                  </div>
-                )}
-
-                {activeQuizItems.length ? (
-                  <div className="quizActions">
-                    <button className="button" type="button" onClick={submitQuiz} disabled={quizSubmitted}>
-                      채점하기
-                    </button>
-                    {quizSubmitted && wrongNotes.length ? (
-                      <button className="button secondary" type="button" onClick={startWrongRetryExam}>
-                        오답만 재시험 보기
-                      </button>
-                    ) : null}
-                    {(quizSubmitted || retryQuizMode) ? (
-                      <button className="button secondary" type="button" onClick={resetFullQuiz}>
-                        전체 퀴즈 다시 풀기
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {quizSubmitted ? (
-                  wrongNotes.length ? (
-                    <div className="wrongNoteWrap">
-                      <div className="sectionTitle">오답노트</div>
-                      <div className="muted">틀린 문제 {wrongNotes.length}개를 기반으로 다시 연습할 수 있어요.</div>
-                      <div className="wrongNoteList">
-                        {wrongNotes.map((note, idx) => (
-                          <div key={`${note.question}-${idx}`} className="wrongNoteItem">
-                            <div className="quizQ">문제: {note.question}</div>
-                            <div className="quizMeta">내 답: {note.userAnswer}</div>
-                            <div className="quizMeta">정답: {note.correctAnswer}</div>
-                            {note.hint ? <div className="quizHint">복습 힌트: {note.hint}</div> : null}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="quizSummary">모든 문제를 맞혔습니다. 훌륭해요.</div>
-                  )
-                ) : null}
-              </>
-            ) : null}
           </div>
 
           <form className="card stack chatPanel" method="post" encType="multipart/form-data" onSubmit={handleGenerateSubmit}>
@@ -1285,7 +1147,136 @@ export function WorkspaceShell({
                   </div>
                 ) : null}
               </>
-            ) : null}
+            ) : (
+              <div className="quizTabPanel">
+                <div className="quizAutoInline">
+                  {retryQuizMode ? <div className="badge">오답 재시험</div> : <div className="muted">PDF 핵심만 추려 간단한 퀴즈를 만듭니다.</div>}
+                  {quizAutoStatus ? <div className="muted">상태: {quizAutoStatus}</div> : null}
+                  <button
+                    type="button"
+                    className="button secondary"
+                    disabled={quizAutoGenerating || !selectedProject?.id || !hasPdfAsset}
+                    onClick={() => {
+                      setQuizAutoTriggeredFor('');
+                      void autoGenerateQuiz();
+                    }}
+                  >
+                    {quizAutoGenerating ? '퀴즈 생성 중...' : '다시 생성'}
+                  </button>
+                </div>
+
+                {activeQuizItems.length ? (
+                  <div className="quizList">
+                    {activeQuizItems.map((item, idx) => (
+                      <div key={`${idx}-${item.question}`} className="quizItem">
+                        <div className="quizQ">Q{idx + 1}. {item.question}</div>
+                        <div className="quizMeta">
+                          유형: {item.type === 'mcq' ? '4지선다' : item.type === 'ox' ? 'OX' : '단답형'}
+                        </div>
+                        {item.source ? <div className="quizMeta">출제 근거: {item.source}</div> : null}
+                        <div className="quizHint">힌트: {item.hint || 'PDF에서 해당 개념이 어떤 맥락으로 설명되는지 다시 떠올려 보세요.'}</div>
+
+                        {item.type === 'mcq' && item.options?.length ? (
+                          <div className="quizChoiceList">
+                            {item.options.map((option, optionIndex) => {
+                              const selected = (quizAnswers[idx] || '') === option;
+                              return (
+                                <button
+                                  key={`${item.question}-${optionIndex}`}
+                                  type="button"
+                                  className={`quizChoice ${selected ? 'selected' : ''}`}
+                                  onClick={() => setQuizAnswer(idx, option)}
+                                  disabled={quizSubmitted}
+                                >
+                                  {optionIndex + 1}. {option}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : item.type === 'ox' ? (
+                          <div className="quizChoiceList row">
+                            {['O', 'X'].map((option) => {
+                              const selected = (quizAnswers[idx] || '') === option;
+                              return (
+                                <button
+                                  key={`${item.question}-${option}`}
+                                  type="button"
+                                  className={`quizChoice ${selected ? 'selected' : ''}`}
+                                  onClick={() => setQuizAnswer(idx, option)}
+                                  disabled={quizSubmitted}
+                                >
+                                  {option}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <input
+                            className="input quizInput"
+                            value={quizAnswers[idx] || ''}
+                            onChange={(event) => setQuizAnswer(idx, event.target.value)}
+                            disabled={quizSubmitted}
+                            placeholder="정답을 짧게 입력하세요"
+                          />
+                        )}
+
+                        {quizSubmitted ? (
+                          <div className="quizA">
+                            정답: {item.type === 'mcq' && typeof item.correctOptionIndex === 'number' && item.options?.[item.correctOptionIndex]
+                              ? item.options[item.correctOptionIndex]
+                              : item.answer}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="dropZone">
+                    <div className="dropZoneTitle">퀴즈를 준비 중입니다</div>
+                    <div className="muted">PDF를 분석해 중요한 부분만 골라 간단한 한국어 퀴즈를 만듭니다.</div>
+                  </div>
+                )}
+
+                {activeQuizItems.length ? (
+                  <div className="quizActions">
+                    <button className="button" type="button" onClick={submitQuiz} disabled={quizSubmitted}>
+                      채점하기
+                    </button>
+                    {quizSubmitted && wrongNotes.length ? (
+                      <button className="button secondary" type="button" onClick={startWrongRetryExam}>
+                        오답만 재시험 보기
+                      </button>
+                    ) : null}
+                    {(quizSubmitted || retryQuizMode) ? (
+                      <button className="button secondary" type="button" onClick={resetFullQuiz}>
+                        전체 퀴즈 다시 풀기
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {quizSubmitted ? (
+                  wrongNotes.length ? (
+                    <div className="wrongNoteWrap">
+                      <div className="sectionTitle">오답노트</div>
+                      <div className="muted">틀린 문제 {wrongNotes.length}개를 바탕으로 다시 연습할 수 있어요.</div>
+                      <div className="wrongNoteList">
+                        {wrongNotes.map((note, idx) => (
+                          <div key={`${note.question}-${idx}`} className="wrongNoteItem">
+                            <div className="quizQ">문제: {note.question}</div>
+                            <div className="quizMeta">내 답: {note.userAnswer}</div>
+                            <div className="quizMeta">정답: {note.correctAnswer}</div>
+                            {note.hint ? <div className="quizHint">복습 힌트: {note.hint}</div> : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="quizSummary">모든 문제를 맞혔습니다. 훌륭해요.</div>
+                  )
+                ) : null}
+              </div>
+            )}
           </form>
         </div>
       </section>

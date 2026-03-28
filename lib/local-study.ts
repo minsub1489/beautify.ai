@@ -71,7 +71,7 @@ function makeExamFocus(pdfText: string, customNotes: string) {
 }
 
 function makeQuestions(examFocus: string[]) {
-  const base = examFocus.slice(0, 8);
+  const base = examFocus.slice(0, 5);
   const snippets = base.map((line) => cleanText(line).slice(0, 90));
   return base.map((focus, idx) => {
     const source = snippets[idx] || cleanText(focus).slice(0, 90);
