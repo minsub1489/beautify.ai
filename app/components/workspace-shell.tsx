@@ -160,13 +160,6 @@ export function WorkspaceShell({
     return '';
   }, [selectedProject]);
 
-  const hasEnglishPassage = useMemo(() => {
-    const text = selectedProject?.latestPdfExcerpt || '';
-    const letters = (text.match(/[A-Za-z]/g) || []).length;
-    const korean = (text.match(/[가-힣]/g) || []).length;
-    return letters > 120 && letters > korean * 1.3;
-  }, [selectedProject?.latestPdfExcerpt]);
-
   const SIDEBAR_MIN = 220;
   const SIDEBAR_MAX = 520;
   const SIDEBAR_COLLAPSE_THRESHOLD = 170;
@@ -438,7 +431,7 @@ export function WorkspaceShell({
   }
 
   async function toggleTranslation() {
-    if (!selectedProject?.id || !hasEnglishPassage) return;
+    if (!selectedProject?.id) return;
 
     if (translationMode === 'translated') {
       setTranslationMode('original');
@@ -458,7 +451,7 @@ export function WorkspaceShell({
         return;
       }
       if (!payload?.detected) {
-        setTranslationStatus('영문 지문이 감지되지 않았습니다.');
+        setTranslationStatus('번역할 문장을 찾지 못했습니다.');
         return;
       }
       setTranslationLines(Array.isArray(payload.lines) ? payload.lines : []);
@@ -676,10 +669,10 @@ export function WorkspaceShell({
                   type="button"
                   onClick={toggleTranslation}
                   disabled={translationLoading}
-                  title={hasEnglishPassage ? '영문 지문 번역' : '영문 지문이 감지될 때 번역이 활성화됩니다'}
+                  title={translationMode === 'translated' ? '원문 보기로 전환' : '한국어 번역 보기'}
                 >
                   <Languages size={16} />
-                  번역
+                  {translationMode === 'translated' ? '원문 보기' : '번역'}
                 </button>
               ) : null}
             </div>
@@ -707,9 +700,9 @@ export function WorkspaceShell({
               </div>
             )}
 
-            {translationMode === 'translated' && hasEnglishPassage ? (
+            {translationMode === 'translated' ? (
               <div className="translationPanel">
-                <div className="sectionTitle">영문 지문 번역</div>
+                <div className="sectionTitle">번역 결과 (한국어)</div>
                 {translationLoading ? <div className="muted">번역을 불러오는 중...</div> : null}
                 {translationStatus ? <div className="muted">{translationStatus}</div> : null}
                 {translationLines.map((line, idx) => (

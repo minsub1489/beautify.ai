@@ -1,18 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-function looksEnglish(text: string) {
-  const letters = (text.match(/[A-Za-z]/g) || []).length;
-  const korean = (text.match(/[가-힣]/g) || []).length;
-  return letters > 120 && letters > korean * 1.3;
-}
-
 function pickSentences(text: string) {
   return text
     .replace(/\s+/g, ' ')
     .split(/(?<=[.!?])\s+/)
     .map((line) => line.trim())
-    .filter((line) => /[A-Za-z]/.test(line) && line.length > 40)
+    .filter((line) => /\p{L}/u.test(line) && line.length > 24)
     .slice(0, 8);
 }
 
@@ -28,10 +22,6 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   }
 
   const source = latestPdf.extractedText.slice(0, 12000);
-  if (!looksEnglish(source)) {
-    return NextResponse.json({ detected: false, lines: [] }, { status: 200 });
-  }
-
   const sentences = pickSentences(source);
   if (!sentences.length) {
     return NextResponse.json({ detected: true, lines: [] }, { status: 200 });
