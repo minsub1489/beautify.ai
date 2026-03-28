@@ -671,10 +671,119 @@ pre {
   background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,241,247,0.96) 100%);
 }
 
+.generateButton,
+.clipButton,
+.chip,
+.liveNotePanel,
+.quizAutoInline {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    transform 180ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease,
+    background-color 220ms ease;
+}
+
+.generateButton::before,
+.clipButton::before,
+.chip::before,
+.liveNotePanel::before,
+.quizAutoInline::before {
+  content: '';
+  position: absolute;
+  top: -40%;
+  left: -35%;
+  width: 42%;
+  height: 180%;
+  pointer-events: none;
+  opacity: 0;
+  transform: rotate(18deg) translateX(-160%);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.24) 38%,
+    rgba(255, 255, 255, 0.88) 50%,
+    rgba(255, 255, 255, 0.22) 62%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  z-index: 0;
+}
+
+.generateButton:hover,
+.clipButton:hover,
+.chip:hover,
+.liveNotePanel:hover,
+.quizAutoInline:hover {
+  transform: translateY(-1px);
+}
+
+.generateButton:hover::before,
+.clipButton:hover::before,
+.chip:hover::before,
+.liveNotePanel:hover::before,
+.quizAutoInline:hover::before {
+  opacity: 1;
+  animation: sparkle-sweep 900ms ease;
+}
+
+.composerInput {
+  border: 1px solid rgba(236, 72, 153, 0.22);
+  background:
+    linear-gradient(180deg, #fff8fc 0%, #fff 100%),
+    linear-gradient(120deg, rgba(255, 255, 255, 0) 24%, rgba(255, 255, 255, 0.82) 50%, rgba(255, 255, 255, 0) 76%);
+  background-size: 100% 100%, 240% 100%;
+  background-position: 0 0, 160% 0;
+  background-repeat: no-repeat;
+  transition:
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    background-position 550ms ease,
+    transform 180ms ease;
+}
+
+.composerInput:hover,
+.composerInput:focus {
+  border-color: rgba(236, 72, 153, 0.34);
+  box-shadow:
+    0 0 0 4px rgba(244, 114, 182, 0.08),
+    0 14px 30px rgba(236, 72, 153, 0.1);
+  background-position: 0 0, -60% 0;
+}
+
+.composerInput:focus {
+  outline: none;
+}
+
 .generateButton {
   background: linear-gradient(135deg, var(--pink-1) 0%, var(--pink-4) 52%, var(--pink-6) 100%);
   color: #fff;
   border-color: transparent;
   box-shadow: 0 12px 26px rgba(236, 72, 153, 0.22);
   font-weight: 700;
+}
+
+.generateButton:hover {
+  box-shadow:
+    0 16px 30px rgba(236, 72, 153, 0.26),
+    0 0 0 1px rgba(255, 255, 255, 0.16) inset;
+}
+
+.clipButton:hover,
+.chip:hover,
+.liveNotePanel:hover,
+.quizAutoInline:hover {
+  box-shadow:
+    0 10px 24px rgba(236, 72, 153, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.66) inset;
+}
+
+@keyframes sparkle-sweep {
+  0% {
+    transform: rotate(18deg) translateX(-170%);
+  }
+  100% {
+    transform: rotate(18deg) translateX(390%);
+  }
 }
