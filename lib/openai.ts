@@ -22,8 +22,8 @@ export const OPENROUTER_MODELS = {
 } as const;
 
 export const OPENAI_MODELS = {
-  text: process.env.OPENAI_TEXT_MODEL || 'gpt-4.1-mini',
-  reasoning: process.env.OPENAI_REASONING_MODEL || 'gpt-4.1-mini',
+  text: process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
+  reasoning: process.env.OPENAI_REASONING_MODEL || 'gpt-4o-mini',
 } as const;
 
 function getApiKey() {
@@ -245,6 +245,7 @@ export async function generateGeminiJson<T>(params: {
 반드시 아래 JSON 스키마를 지켜 유효한 JSON만 출력하라:
 ${JSON.stringify(params.schema)}
 `;
+    const fallbackErrors: Error[] = [];
     if (getOpenAIKey()) {
       try {
         const text = await openAIGenerate({
@@ -253,18 +254,35 @@ ${JSON.stringify(params.schema)}
           temperature: 0.1,
         });
         return JSON.parse(text) as T;
-      } catch {}
+      } catch (fallbackError) {
+        fallbackErrors.push(
+          fallbackError instanceof Error
+            ? fallbackError
+            : new Error('OpenAI 폴백 실패'),
+        );
+      }
     }
 
     if (getOpenRouterKey()) {
-      const text = await openRouterGenerate({
-        model: OPENROUTER_MODELS.reasoning,
-        prompt: fallbackPrompt,
-        temperature: 0.1,
-      });
-      return JSON.parse(text) as T;
+      try {
+        const text = await openRouterGenerate({
+          model: OPENROUTER_MODELS.reasoning,
+          prompt: fallbackPrompt,
+          temperature: 0.1,
+        });
+        return JSON.parse(text) as T;
+      } catch (fallbackError) {
+        fallbackErrors.push(
+          fallbackError instanceof Error
+            ? fallbackError
+            : new Error('OpenRouter 폴백 실패'),
+        );
+      }
     }
 
+    if (fallbackErrors.length > 0) {
+      throw fallbackErrors[fallbackErrors.length - 1];
+    }
     throw error;
   }
 }
@@ -293,6 +311,7 @@ export async function generateGeminiText(params: {
       .map((part) => part.text || '')
       .filter(Boolean)
       .join('\n');
+    const fallbackErrors: Error[] = [];
 
     if (getOpenAIKey()) {
       try {
@@ -301,17 +320,34 @@ export async function generateGeminiText(params: {
           prompt: mergedPrompt,
           temperature: params.temperature ?? 0.2,
         });
-      } catch {}
+      } catch (fallbackError) {
+        fallbackErrors.push(
+          fallbackError instanceof Error
+            ? fallbackError
+            : new Error('OpenAI 폴백 실패'),
+        );
+      }
     }
 
     if (getOpenRouterKey()) {
-      return openRouterGenerate({
-        model: OPENROUTER_MODELS.text,
-        prompt: mergedPrompt,
-        temperature: params.temperature ?? 0.2,
-      });
+      try {
+        return await openRouterGenerate({
+          model: OPENROUTER_MODELS.text,
+          prompt: mergedPrompt,
+          temperature: params.temperature ?? 0.2,
+        });
+      } catch (fallbackError) {
+        fallbackErrors.push(
+          fallbackError instanceof Error
+            ? fallbackError
+            : new Error('OpenRouter 폴백 실패'),
+        );
+      }
     }
 
+    if (fallbackErrors.length > 0) {
+      throw fallbackErrors[fallbackErrors.length - 1];
+    }
     throw error;
   }
 }
