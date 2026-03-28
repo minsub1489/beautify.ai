@@ -10,9 +10,11 @@ import { getCurrentUserId } from '@/lib/auth-user';
 import { ensureBillingBootstrap } from '@/lib/billing/bootstrap';
 import { beginAiUsage, failAiUsage, finalizeAiUsage } from '@/lib/billing/usage';
 import { assertWithinRateLimit } from '@/lib/rate-limit';
+import { generateLocalStudyPack } from '@/lib/local-study';
 
 export const maxDuration = 60;
 const LOW_TOKEN_MODE = (process.env.AI_LOW_TOKEN_MODE || '').toLowerCase() === 'true';
+const LOCAL_PIPELINE_MODE = (process.env.AI_USE_LOCAL_PIPELINE || '').toLowerCase() === 'true';
 
 function inferTitleFromFiles(pdfName: string, fallbackName?: string) {
   const source = pdfName || fallbackName || '새 프로젝트';
@@ -344,14 +346,40 @@ export async function POST(req: Request) {
     });
     usageRequestId = usageGuard.requestId;
 
-    const result = await generateAnnotatedNotes({
-      subject: projectForGeneration.subject ?? '미지정',
-      lectureTitle: projectForGeneration.title,
-      pdfText: latestPdf.extractedText || '',
-      transcriptText,
-      notionText,
-      customNotes: mergedNotes,
-    });
+    let result;
+    if (LOCAL_PIPELINE_MODE) {
+      result = generateLocalStudyPack({
+        lectureTitle: projectForGeneration.title,
+        pdfText: latestPdf.extractedText || '',
+        transcriptText,
+        notionText,
+        customNotes: mergedNotes,
+      });
+    } else {
+      try {
+        result = await generateAnnotatedNotes({
+          subject: projectForGeneration.subject ?? '미지정',
+          lectureTitle: projectForGeneration.title,
+          pdfText: latestPdf.extractedText || '',
+          transcriptText,
+          notionText,
+          customNotes: mergedNotes,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '';
+        if (/quota|rate limit|429|insufficient_quota|RESOURCE_EXHAUSTED/i.test(message)) {
+          result = generateLocalStudyPack({
+            lectureTitle: projectForGeneration.title,
+            pdfText: latestPdf.extractedText || '',
+            transcriptText,
+            notionText,
+            customNotes: mergedNotes,
+          });
+        } else {
+          throw error;
+        }
+      }
+    }
 
     const originalPdf = await readPdfAssetBytes({
       storageKey: latestPdf.storageKey,
