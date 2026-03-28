@@ -625,26 +625,6 @@ export function WorkspaceShell({
             {audioName ? <div className="fileBadge">최근 드롭 오디오 · {audioName}</div> : null}
           </div>
           <div className="topBarActions">
-            <div className="viewToggle" role="tablist" aria-label="작업 보기 전환">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={workspaceView === 'notes'}
-                className={`viewToggleButton ${workspaceView === 'notes' ? 'active' : ''}`}
-                onClick={() => setWorkspaceView('notes')}
-              >
-                필기
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={workspaceView === 'quiz'}
-                className={`viewToggleButton ${workspaceView === 'quiz' ? 'active' : ''}`}
-                onClick={() => setWorkspaceView('quiz')}
-              >
-                퀴즈
-              </button>
-            </div>
             <AuthControls />
             <div className="billingMini">
               <div className="billingBalance">크레딧 {loadingBalance ? '불러오는 중...' : Number(creditBalance || '0').toLocaleString()}</div>
@@ -769,6 +749,26 @@ export function WorkspaceShell({
             <input type="hidden" name="customNotes" value="" />
 
             <div className="sectionTitle">생성</div>
+            <div className="viewToggle" role="tablist" aria-label="작업 보기 전환">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={workspaceView === 'notes'}
+                className={`viewToggleButton ${workspaceView === 'notes' ? 'active' : ''}`}
+                onClick={() => setWorkspaceView('notes')}
+              >
+                필기
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={workspaceView === 'quiz'}
+                className={`viewToggleButton ${workspaceView === 'quiz' ? 'active' : ''}`}
+                onClick={() => setWorkspaceView('quiz')}
+              >
+                퀴즈
+              </button>
+            </div>
 
             <div className="composerRow">
               <textarea
