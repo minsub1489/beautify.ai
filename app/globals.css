@@ -518,28 +518,34 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 .authControls { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .authStatus { font-size: 12px; color: var(--muted); padding: 0 4px; }
 .accountControls { position: relative; }
+.accountLoginButton {
+  border-color: rgba(37, 99, 235, 0.14);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,249,255,0.98) 100%);
+  color: #1d4ed8;
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.08);
+}
 .accountButton {
-  border: 1px solid rgba(236,72,153,0.16);
-  background: linear-gradient(135deg, rgba(255,255,255,0.94) 0%, rgba(255,240,248,0.96) 100%);
+  border: 1px solid rgba(37,99,235,0.16);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,255,0.98) 100%);
   color: var(--text);
-  border-radius: 16px;
-  padding: 8px 12px;
+  border-radius: 18px;
+  padding: 9px 14px;
   display: inline-flex;
   align-items: center;
   gap: 10px;
   cursor: pointer;
   min-width: 0;
-  box-shadow: 0 10px 24px rgba(236, 72, 153, 0.12);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
 }
 .accountButton.open {
-  border-color: rgba(236,72,153,0.28);
-  box-shadow: 0 14px 30px rgba(236, 72, 153, 0.16);
+  border-color: rgba(37,99,235,0.28);
+  box-shadow: 0 18px 38px rgba(37, 99, 235, 0.14);
 }
 .accountAvatar {
   width: 34px;
   height: 34px;
   border-radius: 999px;
-  background: linear-gradient(135deg, var(--pink-1) 0%, var(--pink-4) 60%, var(--pink-6) 100%);
+  background: linear-gradient(180deg, #8b93a7 0%, #667085 100%);
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -559,17 +565,24 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
 }
 .accountButtonName {
   max-width: 164px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: #334155;
+}
+.accountButtonMeta {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 700;
 }
 .accountButtonChevron {
-  color: #9d174d;
+  color: #94a3b8;
   transition: transform .18s ease;
   flex: 0 0 auto;
 }
@@ -579,45 +592,251 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   top: calc(100% + 10px);
   right: 0;
   z-index: 80;
-  width: min(320px, calc(100vw - 32px));
-  border-radius: 20px;
-  border: 1px solid rgba(236,72,153,0.16);
-  background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(255,244,249,0.98) 100%);
-  box-shadow: 0 24px 48px rgba(35, 28, 54, 0.16);
-  padding: 14px;
+  width: min(360px, calc(100vw - 32px));
+  border-radius: 26px;
+  border: 1px solid rgba(148,163,184,0.18);
+  background: linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(251,252,255,0.995) 100%);
+  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.16);
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  backdrop-filter: blur(18px);
+  gap: 0;
+  overflow: hidden;
+  backdrop-filter: blur(22px);
 }
 .accountProfile {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+.accountProfileCard {
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(226,232,240,0.9);
+  gap: 14px;
+}
+.accountProfileIdentity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.accountAvatarLarge {
+  width: 54px;
+  height: 54px;
+  font-size: 20px;
+}
+.accountProfileText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .accountProfileName {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
-  color: var(--text);
+  color: #1f2937;
+}
+.accountProfileRole {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 700;
 }
 .accountProfileEmail {
   font-size: 12px;
-  color: var(--muted);
+  color: #64748b;
   word-break: break-all;
+}
+.accountProfileBadge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
 }
 .accountBillingCard {
   display: flex;
   flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: #fff;
+}
+.accountBillingHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  border-radius: 16px;
-  border: 1px solid rgba(236,72,153,0.14);
-  background: linear-gradient(135deg, rgba(255,255,255,0.92) 0%, rgba(255,240,248,0.96) 100%);
-  padding: 12px;
+}
+.accountBillingTitle {
+  font-size: 14px;
+  font-weight: 900;
+  color: #111827;
+}
+.accountBillingLink {
+  font-size: 13px;
+  font-weight: 800;
+  color: #94a3b8;
+}
+.accountStatsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.accountStatCard {
+  min-height: 136px;
+  border-radius: 20px;
+  background: #f8fafc;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+}
+.accountStatCardPrimary {
+  background: linear-gradient(180deg, #edf5ff 0%, #e6f0ff 100%);
+}
+.accountStatLabel {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #4f46e5;
+  font-weight: 800;
+}
+.accountStatValue {
+  font-size: 44px;
+  line-height: 1;
+  font-weight: 900;
+  color: #1d4ed8;
+}
+.accountStatValueCompact {
+  font-size: 28px;
+  color: #334155;
+}
+.accountStatHint {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 700;
+}
+.accountBillingNote {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+}
+.accountChargeButton {
+  border: none;
+  border-radius: 18px;
+  min-height: 52px;
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 18px 34px rgba(37, 99, 235, 0.22);
+}
+.accountActionRows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.accountToggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+}
+.accountActionText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.accountActionTitle {
+  font-size: 14px;
+  font-weight: 800;
+  color: #334155;
+}
+.accountActionMeta {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.accountToggleSwitch {
+  position: relative;
+  display: inline-flex;
+  width: 48px;
+  height: 28px;
+  border-radius: 999px;
+  background: #dbe3ef;
+  transition: background .18s ease;
+  flex: 0 0 auto;
+}
+.accountToggleSwitch.on {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+}
+.accountToggleSwitch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.accountToggleKnob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.16);
+  transition: transform .18s ease;
+}
+.accountToggleSwitch.on .accountToggleKnob {
+  transform: translateX(20px);
+}
+.accountBillingStatus {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.6;
+}
+.accountFooterActions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 20px 18px;
+  border-top: 1px solid rgba(226,232,240,0.9);
+  background: #fff;
 }
 .billingBalance { font-size: 13px; font-weight: 700; color: #be185d; white-space: nowrap; }
 .autoRechargeToggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .autoRechargeToggle input { width: 14px; height: 14px; }
-.accountLogoutButton { width: 100%; justify-content: center; }
+.accountFooterButton {
+  width: 100%;
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 4px;
+  color: #64748b;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.accountLogoutButton {
+  color: #ef4444;
+}
 .sidebarToggleFixed {
   position: fixed;
   top: 14px;
@@ -746,6 +965,7 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   .accountControls { width: 100%; }
   .accountButton { width: 100%; justify-content: space-between; }
   .accountPanel { width: 100%; position: static; }
+  .accountStatsGrid { grid-template-columns: 1fr; }
   .composerRow { flex-direction: column; align-items: stretch; }
   .composerActions { justify-content: space-between; }
   .generationRangeInputs { flex-direction: column; align-items: stretch; }
@@ -1543,8 +1763,13 @@ pre {
   color: #d7e2f3;
 }
 
+[data-theme='dark'] .accountLoginButton {
+  border-color: rgba(96, 165, 250, 0.24);
+  color: #bfdbfe;
+}
+
 [data-theme='dark'] .accountButton.open {
-  border-color: rgba(244, 114, 182, 0.3);
+  border-color: rgba(96, 165, 250, 0.28);
 }
 
 [data-theme='dark'] .accountPanel,
@@ -1557,11 +1782,62 @@ pre {
 [data-theme='dark'] .accountProfileName,
 [data-theme='dark'] .accountButtonName,
 [data-theme='dark'] .billingBalance {
-  color: #f8d4e9;
+  color: #e5eefb;
 }
 
+[data-theme='dark'] .accountButtonMeta,
+[data-theme='dark'] .accountProfileRole,
+[data-theme='dark'] .accountProfileEmail,
+[data-theme='dark'] .accountBillingStatus,
+[data-theme='dark'] .accountActionMeta,
+[data-theme='dark'] .accountBillingNote,
+[data-theme='dark'] .accountStatHint {
+  color: #94a3b8;
+}
+
+[data-theme='dark'] .accountBillingTitle,
+[data-theme='dark'] .accountActionTitle,
+[data-theme='dark'] .accountFooterButton,
+[data-theme='dark'] .accountStatValueCompact {
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] .accountBillingLink,
 [data-theme='dark'] .accountButtonChevron {
-  color: #f9a8d4;
+  color: #93c5fd;
+}
+
+[data-theme='dark'] .accountProfileBadge {
+  background: rgba(37, 99, 235, 0.18);
+  color: #bfdbfe;
+}
+
+[data-theme='dark'] .accountStatCard {
+  background: rgba(30, 41, 59, 0.78);
+}
+
+[data-theme='dark'] .accountStatCardPrimary {
+  background: linear-gradient(180deg, rgba(30, 64, 175, 0.36) 0%, rgba(30, 41, 59, 0.82) 100%);
+}
+
+[data-theme='dark'] .accountStatLabel,
+[data-theme='dark'] .accountStatValue {
+  color: #bfdbfe;
+}
+
+[data-theme='dark'] .accountChargeButton {
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 18px 36px rgba(37, 99, 235, 0.24);
+}
+
+[data-theme='dark'] .accountToggleRow,
+[data-theme='dark'] .accountFooterActions {
+  background: transparent;
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+[data-theme='dark'] .accountToggleSwitch {
+  background: rgba(71, 85, 105, 0.9);
 }
 
 [data-theme='dark'] .themeToggleButton {

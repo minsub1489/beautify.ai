@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, LogOut } from 'lucide-react';
+import { BadgeCheck, ChevronDown, LogOut, UserRound, WalletCards, Zap } from 'lucide-react';
 import { getProviders, signIn, signOut, useSession } from 'next-auth/react';
 
 type ProviderMap = Record<string, { id: string; name: string }>;
@@ -28,6 +28,10 @@ export function AuthControls({
   const [loadingProviders, setLoadingProviders] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const balanceValue = Number(creditBalance || '0');
+  const formattedBalance = loadingBalance ? '...' : balanceValue.toLocaleString();
+  const creditStateLabel = loadingBalance ? '확인 중' : balanceValue > 0 ? '사용 가능' : '부족';
+  const creditStateDetail = autoRechargeEnabled ? '자동충전 켜짐' : '자동충전 꺼짐';
 
   useEffect(() => {
     let mounted = true;
@@ -89,38 +93,92 @@ export function AuthControls({
           </div>
           <div className="accountButtonText">
             <div className="accountButtonName">{displayName}</div>
+            <div className="accountButtonMeta">마이페이지</div>
           </div>
           <ChevronDown size={16} className={`accountButtonChevron ${menuOpen ? 'open' : ''}`} />
         </button>
 
         {menuOpen ? (
           <div className="accountPanel">
-            <div className="accountProfile">
-              <div className="accountProfileName">{displayName}</div>
-              {session.user.email ? <div className="accountProfileEmail">{session.user.email}</div> : null}
+            <div className="accountProfile accountProfileCard">
+              <div className="accountProfileIdentity">
+                <div className="accountAvatar accountAvatarLarge" aria-hidden="true">
+                  {session.user.image ? <img src={session.user.image} alt="" className="accountAvatarImage" referrerPolicy="no-referrer" /> : avatarInitial}
+                </div>
+                <div className="accountProfileText">
+                  <div className="accountProfileName">{displayName}</div>
+                  <div className="accountProfileRole">Beautify 사용자</div>
+                  {session.user.email ? <div className="accountProfileEmail">{session.user.email}</div> : null}
+                </div>
+              </div>
+              <div className="accountProfileBadge">
+                <BadgeCheck size={16} />
+                로그인됨
+              </div>
             </div>
 
             <div className="accountBillingCard">
-              <div className="billingBalance">크레딧 {loadingBalance ? '불러오는 중...' : Number(creditBalance || '0').toLocaleString()}</div>
-              <button className="button secondary" type="button" onClick={onQuickCharge}>
-                + 충전
+              <div className="accountBillingHeader">
+                <div className="accountBillingTitle">현재 크레딧 현황</div>
+                <div className="accountBillingLink">마이페이지</div>
+              </div>
+
+              <div className="accountStatsGrid">
+                <div className="accountStatCard accountStatCardPrimary">
+                  <div className="accountStatLabel">보유 크레딧</div>
+                  <div className="accountStatValue">{formattedBalance}</div>
+                </div>
+                <div className="accountStatCard">
+                  <div className="accountStatLabel">상태</div>
+                  <div className="accountStatValue accountStatValueCompact">{creditStateLabel}</div>
+                  <div className="accountStatHint">{creditStateDetail}</div>
+                </div>
+              </div>
+
+              <div className="accountBillingNote">
+                <WalletCards size={15} />
+                필기와 퀴즈 생성에만 크레딧이 사용됩니다.
+              </div>
+
+              <button className="accountChargeButton" type="button" onClick={onQuickCharge}>
+                <Zap size={16} />
+                크레딧 추가 충전
               </button>
-              <label className="autoRechargeToggle">
-                <input
-                  type="checkbox"
-                  checked={autoRechargeEnabled}
-                  onChange={(event) => onToggleAutoRecharge(event.target.checked)}
-                />
-                자동충전
-              </label>
+
+              <div className="accountActionRows">
+                <label className="accountToggleRow">
+                  <div className="accountActionText">
+                    <span className="accountActionTitle">자동충전</span>
+                    <span className="accountActionMeta">{autoRechargeEnabled ? '부족해지면 자동으로 충전돼요.' : '필요할 때 수동으로 충전해 주세요.'}</span>
+                  </div>
+                  <span className={`accountToggleSwitch ${autoRechargeEnabled ? 'on' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={autoRechargeEnabled}
+                      onChange={(event) => onToggleAutoRecharge(event.target.checked)}
+                    />
+                    <span className="accountToggleKnob" aria-hidden="true" />
+                  </span>
+                </label>
+              </div>
+
+              {billingStatus ? <div className="accountBillingStatus">{billingStatus}</div> : null}
             </div>
 
-            {billingStatus ? <div className="authStatus">{billingStatus}</div> : null}
-
-            <button className="button secondary accountLogoutButton" type="button" onClick={() => void signOut({ callbackUrl: '/' })}>
-              <LogOut size={16} />
-              로그아웃
-            </button>
+            <div className="accountFooterActions">
+              <button className="accountFooterButton accountLogoutButton" type="button" onClick={() => void signOut({ callbackUrl: '/' })}>
+                <LogOut size={16} />
+                로그아웃
+              </button>
+              <button
+                className="accountFooterButton"
+                type="button"
+                onClick={() => setMenuOpen(false)}
+              >
+                <UserRound size={16} />
+                닫기
+              </button>
+            </div>
           </div>
         ) : null}
       </div>
@@ -131,7 +189,8 @@ export function AuthControls({
     <div className="authControls">
       {oauthButtons.length ? (
         oauthButtons.map((provider) => (
-          <button key={provider.id} className="button secondary" type="button" onClick={() => void signIn(provider.id)}>
+          <button key={provider.id} className="button secondary accountLoginButton" type="button" onClick={() => void signIn(provider.id)}>
+            <UserRound size={16} />
             {provider.label}
           </button>
         ))
