@@ -425,19 +425,20 @@ export function WorkspaceShell({
     if (!basePreviewAsset) return '';
     return `/api/assets/${basePreviewAsset.id}/raw`;
   }, [basePreviewAsset]);
+  const isTranslatedPreviewActive = translationMode === 'translated' && Boolean(translatedAssetId);
 
   const previewPdfUrl = useMemo(() => {
-    if (translationMode === 'translated' && translatedAssetId) {
+    if (isTranslatedPreviewActive) {
       return `/api/assets/${translatedAssetId}/raw`;
     }
     return basePreviewPdfUrl;
-  }, [basePreviewPdfUrl, translatedAssetId, translationMode]);
+  }, [basePreviewPdfUrl, isTranslatedPreviewActive, translatedAssetId]);
   const previewDownloadName = useMemo(() => {
-    if (translationMode === 'translated' && translatedAssetId) {
+    if (isTranslatedPreviewActive) {
       return `${selectedProject?.title || 'translated'}-translated.pdf`;
     }
     return basePreviewAsset?.originalName || `${selectedProject?.title || 'document'}.pdf`;
-  }, [basePreviewAsset, selectedProject?.title, translatedAssetId, translationMode]);
+  }, [basePreviewAsset, isTranslatedPreviewActive, selectedProject?.title]);
   const buildPdfPagePreviewUrl = (page: number) => {
     if (!latestPdfAsset?.id) return '';
     return `/api/assets/${latestPdfAsset.id}/page-preview?page=${page}#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit`;
@@ -958,13 +959,16 @@ export function WorkspaceShell({
   async function toggleTranslation() {
     if (!selectedProject?.id || !basePreviewPdfUrl) return;
 
-    if (translationMode === 'translated') {
+    if (isTranslatedPreviewActive) {
       setTranslationMode('original');
       return;
     }
 
-    setTranslationMode('translated');
-    if (translatedAssetId) return;
+    if (translatedAssetId) {
+      setTranslationMode('translated');
+      setTranslationStatus('번역된 PDF를 적용했습니다.');
+      return;
+    }
 
     setTranslationLoading(true);
     setTranslationStatus('');
@@ -978,14 +982,13 @@ export function WorkspaceShell({
       }
       if (!payload?.assetId || typeof payload.assetId !== 'string') {
         setTranslationStatus('번역 PDF를 생성하지 못했습니다.');
-        setTranslationMode('original');
         return;
       }
       setTranslatedAssetId(payload.assetId);
+      setTranslationMode('translated');
       setTranslationStatus('번역된 PDF를 적용했습니다.');
     } catch {
       setTranslationStatus('번역 요청 중 네트워크 오류가 발생했습니다.');
-      setTranslationMode('original');
     } finally {
       setTranslationLoading(false);
     }
@@ -1808,15 +1811,15 @@ export function WorkspaceShell({
                     className="button secondary"
                     type="button"
                     onClick={toggleTranslation}
-                    disabled={translationLoading && translationMode !== 'translated'}
-                    title={translationMode === 'translated' ? '원문 보기로 전환' : '한국어 번역 보기'}
+                    disabled={translationLoading}
+                    title={isTranslatedPreviewActive ? '원문 보기로 전환' : '한국어 번역 PDF 보기'}
                   >
                     <Languages size={16} />
-                    {translationLoading && translationMode !== 'translated'
+                    {translationLoading
                       ? '번역 중...'
-                      : translationMode === 'translated'
+                      : isTranslatedPreviewActive
                         ? '원문 보기'
-                      : '번역'}
+                        : '번역'}
                   </button>
                 ) : null}
                 {latestPdfAsset ? (
