@@ -1,14 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { assignProjectSortOrder, getNextProjectSortOrder, persistProjectSortOrder } from '@/lib/project-sort';
 import { createProjectSchema } from '@/lib/validators';
-
-async function getNextProjectSortOrder() {
-  const latest = await prisma.project.findFirst({
-    orderBy: { sortOrder: 'desc' },
-    select: { sortOrder: true },
-  });
-  return (latest?.sortOrder ?? -1) + 1;
-}
 
 export async function PATCH(req: Request) {
   const body = await req.json().catch(() => ({})) as { projectIds?: unknown };
@@ -33,14 +26,10 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: '일부 프로젝트를 찾을 수 없습니다.' }, { status: 404 });
   }
 
-  await prisma.$transaction(
-    uniqueProjectIds.map((projectId, index) =>
-      prisma.project.update({
-        where: { id: projectId },
-        data: { sortOrder: index },
-      })
-    ),
-  );
+  const persisted = await persistProjectSortOrder(uniqueProjectIds);
+  if (!persisted) {
+    return NextResponse.json({ error: '프로젝트 순서를 저장하지 못했습니다.' }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true, projectIds: uniqueProjectIds }, { status: 200 });
 }
@@ -60,12 +49,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
+    const nextSortOrder = await getNextProjectSortOrder();
     const project = await prisma.project.create({
       data: {
         ...parsed.data,
-        sortOrder: await getNextProjectSortOrder(),
       },
     });
+    await assignProjectSortOrder(project.id, nextSortOrder);
     return NextResponse.json({ project });
   }
 
@@ -80,11 +70,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const nextSortOrder = await getNextProjectSortOrder();
   const project = await prisma.project.create({
     data: {
       ...parsed.data,
-      sortOrder: await getNextProjectSortOrder(),
     },
   });
+  await assignProjectSortOrder(project.id, nextSortOrder);
   return NextResponse.redirect(new URL(`/?projectId=${project.id}`, req.url), 303);
 }

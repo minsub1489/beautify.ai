@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { getOrderedProjectIds } from '@/lib/project-sort';
 import { WorkspaceShell } from './components/workspace-shell';
 
 export default async function HomePage({
@@ -8,14 +9,22 @@ export default async function HomePage({
 }) {
   const resolvedParams = (await searchParams) || {};
 
-  const projects = await prisma.project.findMany({
-    orderBy: [{ sortOrder: 'asc' }, { updatedAt: 'desc' }],
+  const projectRows = await prisma.project.findMany({
+    orderBy: { updatedAt: 'desc' },
     include: {
       assets: true,
       runs: { orderBy: { createdAt: 'desc' }, take: 1, include: { outputAsset: true } },
       messages: { orderBy: { createdAt: 'asc' } },
     },
   });
+  const orderedProjectIds = await getOrderedProjectIds();
+  const projectMap = new Map(projectRows.map((project) => [project.id, project]));
+  const orderedProjectIdSet = new Set(orderedProjectIds);
+  const orderedProjects = orderedProjectIds
+    .map((projectId) => projectMap.get(projectId))
+    .filter((project): project is typeof projectRows[number] => Boolean(project));
+  const remainingProjects = projectRows.filter((project) => !orderedProjectIdSet.has(project.id));
+  const projects = orderedProjects.length ? [...orderedProjects, ...remainingProjects] : projectRows;
 
   const selected =
     projects.find((project) => project.id === resolvedParams.projectId) ||
