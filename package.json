@@ -3,11 +3,13 @@
   "version": "0.3.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "prisma generate && next dev -p 3000",
     "build": "prisma generate && next build",
-    "start": "next start -p 3000",
+    "start": "prisma generate && next start -p 3000",
+    "postinstall": "prisma generate",
     "lint": "next lint",
     "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy"
   },
