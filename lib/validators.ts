@@ -11,6 +11,9 @@ export const generateSchema = z.object({
   notionPageId: z.string().optional(),
   customNotes: z.string().optional(),
   noteText: z.string().optional().default(''),
+  mode: z.enum(['notes', 'quiz']).optional().default('notes'),
+  rangeStart: z.string().optional().default(''),
+  rangeEnd: z.string().optional().default(''),
   redirectTo: z.string().optional().default('/'),
 });
 

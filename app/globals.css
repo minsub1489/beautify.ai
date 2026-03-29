@@ -135,6 +135,57 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 .composerRow { display: flex; gap: 10px; align-items: flex-end; }
 .composerInput { min-height: 150px; }
 .composerActions { display: flex; gap: 10px; align-items: center; }
+.generationRangeCard {
+  border: 1px solid rgba(236,72,153,0.16);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,241,247,0.97) 100%);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.generationRangeHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.generationRangeBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(255,126,182,0.18) 0%, rgba(244,114,182,0.14) 100%);
+  color: #b83280;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid rgba(236,72,153,0.16);
+}
+.generationRangeInputs {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.generationRangeField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 112px;
+  flex: 1 1 120px;
+}
+.generationRangeField span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #9d174d;
+}
+.generationRangeInput {
+  min-height: 46px;
+}
+.generationRangeReset {
+  white-space: nowrap;
+}
 .clipButton { background: linear-gradient(135deg, rgba(255,255,255,0.94) 0%, rgba(255,238,246,0.94) 100%); border-color: rgba(236, 72, 153, 0.18); color: #be185d; }
 .attachmentList { display: flex; flex-wrap: wrap; gap: 8px; }
 .attachmentChip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(236,72,153,0.16); border-radius: 999px; padding: 7px 12px; background: rgba(255,255,255,0.78); font-size: 13px; }
@@ -598,6 +649,8 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   .billingMini { width: 100%; justify-content: space-between; }
   .composerRow { flex-direction: column; align-items: stretch; }
   .composerActions { justify-content: space-between; }
+  .generationRangeInputs { flex-direction: column; align-items: stretch; }
+  .generationRangeField { width: 100%; }
   .pageEditorToolbar { flex-direction: column; align-items: stretch; }
   .pageEditorItemMain { align-items: flex-start; }
   .previewFrame { height: 62vh; min-height: 420px; }
@@ -701,6 +754,21 @@ pre {
 .pageNotePanel {
   border: 1px solid #dce7ff;
   background: #f8fbff;
+}
+
+.generationRangeCard {
+  border: 1px solid rgba(236,72,153,0.16);
+  background: linear-gradient(135deg, rgba(255,255,255,0.92) 0%, rgba(255,241,247,0.96) 100%);
+}
+
+.generationRangeBadge {
+  background: linear-gradient(135deg, rgba(255,126,182,0.16) 0%, rgba(244,114,182,0.12) 100%);
+  color: #9d174d;
+  border: 1px solid rgba(236,72,153,0.16);
+}
+
+.generationRangeField span {
+  color: #9d174d;
 }
 
 .pageNoteItem {
@@ -882,7 +950,8 @@ pre {
 }
 
 .liveNotePanel,
-.quizAutoInline {
+.quizAutoInline,
+.generationRangeCard {
   border: 1px solid rgba(236,72,153,0.16);
   background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,241,247,0.96) 100%);
 }
@@ -891,7 +960,8 @@ pre {
 .clipButton,
 .chip,
 .liveNotePanel,
-.quizAutoInline {
+.quizAutoInline,
+.generationRangeCard {
   position: relative;
   overflow: hidden;
   isolation: isolate;
@@ -906,7 +976,8 @@ pre {
 .clipButton::before,
 .chip::before,
 .liveNotePanel::before,
-.quizAutoInline::before {
+.quizAutoInline::before,
+.generationRangeCard::before {
   content: '';
   position: absolute;
   top: -40%;
@@ -931,7 +1002,8 @@ pre {
 .clipButton:hover,
 .chip:hover,
 .liveNotePanel:hover,
-.quizAutoInline:hover {
+.quizAutoInline:hover,
+.generationRangeCard:hover {
   transform: translateY(-1px);
 }
 
@@ -939,7 +1011,8 @@ pre {
 .clipButton:hover::before,
 .chip:hover::before,
 .liveNotePanel:hover::before,
-.quizAutoInline:hover::before {
+.quizAutoInline:hover::before,
+.generationRangeCard:hover::before {
   opacity: 1;
   animation: sparkle-sweep 900ms ease;
 }
@@ -989,7 +1062,8 @@ pre {
 .clipButton:hover,
 .chip:hover,
 .liveNotePanel:hover,
-.quizAutoInline:hover {
+.quizAutoInline:hover,
+.generationRangeCard:hover {
   box-shadow:
     0 10px 24px rgba(236, 72, 153, 0.12),
     0 0 0 1px rgba(255, 255, 255, 0.66) inset;
@@ -1235,6 +1309,7 @@ pre {
 [data-theme='dark'] .quizProgressCard,
 [data-theme='dark'] .wrongNoteWrap,
 [data-theme='dark'] .quizAutoInline,
+[data-theme='dark'] .generationRangeCard,
 [data-theme='dark'] .liveNotePanel {
   background: linear-gradient(180deg, rgba(18, 28, 41, 0.94) 0%, rgba(13, 20, 31, 0.98) 100%);
   border-color: rgba(95, 126, 170, 0.2);
@@ -1272,6 +1347,7 @@ pre {
 }
 
 [data-theme='dark'] .pageEditorCountBadge,
+[data-theme='dark'] .generationRangeBadge,
 [data-theme='dark'] .badge {
   background: rgba(59, 130, 246, 0.16);
   color: #bcd3ff;
@@ -1479,8 +1555,13 @@ pre {
 [data-theme='dark'] .clipButton,
 [data-theme='dark'] .chip,
 [data-theme='dark'] .quizAutoInline,
+[data-theme='dark'] .generationRangeCard,
 [data-theme='dark'] .liveNotePanel {
   border-color: rgba(244, 114, 182, 0.18);
+}
+
+[data-theme='dark'] .generationRangeField span {
+  color: #f6c8df;
 }
 
 [data-theme='dark'] .clipButton {

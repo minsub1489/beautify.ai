@@ -1,5 +1,5 @@
 import { GEMINI_MODELS, generateGeminiJson, toUserFacingGeminiError } from './openai';
-import type { GenerationResult } from './types';
+import type { GenerationResult, QuizQuestion } from './types';
 
 const LOW_TOKEN_MODE = (process.env.AI_LOW_TOKEN_MODE || '').toLowerCase() === 'true';
 
@@ -96,7 +96,7 @@ export async function generateAnnotatedNotes(payload: {
   transcriptText?: string;
   notionText?: string;
   customNotes?: string;
-}): Promise<GenerationResult> {
+}): Promise<Pick<GenerationResult, 'summary' | 'examFocus' | 'notesByPage' | 'visuals'>> {
   const generatePdfMax = toInt(process.env.AI_GENERATE_PDF_MAX_CHARS, LOW_TOKEN_MODE ? 4200 : 13000);
   const generateTranscriptMax = toInt(process.env.AI_GENERATE_TRANSCRIPT_MAX_CHARS, LOW_TOKEN_MODE ? 1800 : 6000);
   const generateNotionMax = toInt(process.env.AI_GENERATE_NOTION_MAX_CHARS, LOW_TOKEN_MODE ? 1400 : 5000);
@@ -141,16 +141,7 @@ export async function generateAnnotatedNotes(payload: {
 15) 코딩/AI 계열이면 개념 정의뿐 아니라 "입력→처리→출력", 함수 역할, 모델 흐름, 학습 포인트, 자주 틀리는 부분을 강조하라.
 16) 딥러닝/AI 계열이면 수식이 있더라도 직관, 손실함수 의미, 역전파/학습 흐름, 모델 비교를 학생이 이해하기 쉽게 바꿔라.
 17) 사용자가 메모를 채팅처럼 여러 개 넣었으면 각 메모를 모두 반영하라.
-18) reviewQuestions는 ${LOW_TOKEN_MODE ? '4개' : '4~5개'}만 만들고, 반드시 PDF 본문과 페이지 개요만 분석해서 출제해라.
-19) reviewQuestions의 type은 short/ox/mcq만 사용하고, 세 유형이 고르게 섞이게 만들어라.
-20) short: answer는 1~2문장 핵심답. ox: answer는 반드시 O 또는 X 중 하나. mcq: options는 반드시 4개, correctOptionIndex는 0~3.
-21) 모든 quiz question/answer/hint/options/source는 반드시 한국어로 작성해라.
-22) 각 문제마다 source에 PDF 본문 또는 페이지 개요에서 실제로 확인되는 출제 근거 문구(짧은 발췌)를 넣어라.
-23) transcript/notion/customNotes는 notesByPage 보조용일 뿐, reviewQuestions의 근거로 사용하면 안 된다.
-24) source와 무관한 일반론/상식형 문제는 금지한다.
-25) PDF에서 중요도가 낮은 주변 설명은 문제화하지 말고, 정의/원리/과정/비교/결론처럼 시험에 바로 나올 핵심만 고른다.
-26) hint는 한 줄 힌트로 작성하고, 답을 그대로 반복하지 말아라.
-27) formula를 만들 때 expression은 가능한 한 짧고 읽기 쉬운 식/의사수식으로 적고, meaning/example은 학생이 이해하기 쉬운 한국어로 적는다.
+18) formula를 만들 때 expression은 가능한 한 짧고 읽기 쉬운 식/의사수식으로 적고, meaning/example은 학생이 이해하기 쉬운 한국어로 적는다.
 
 입력:
 - 과목: ${payload.subject ?? '미지정'}
@@ -177,11 +168,10 @@ visuals: [
  또는
  {title, page:number, kind:'formula', caption, formula:{expression:string, meaning?:string, example?:string}}
 ]
-reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint?:string, source:string, options?:string[], correctOptionIndex?:number}]
 `;
 
   try {
-    return await generateGeminiJson<GenerationResult>({
+    return await generateGeminiJson<Pick<GenerationResult, 'summary' | 'examFocus' | 'notesByPage' | 'visuals'>>({
       model: LOW_TOKEN_MODE ? GEMINI_MODELS.text : GEMINI_MODELS.reasoning,
       prompt,
       schema: {
@@ -283,7 +273,66 @@ reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint
               },
               required: ['title', 'page', 'kind', 'caption', 'graph', 'timeline', 'table', 'flowchart', 'formula']
             }
-          },
+          }
+        },
+        required: ['summary', 'examFocus', 'notesByPage', 'visuals']
+      },
+    });
+  } catch (error) {
+    throw new Error(toUserFacingGeminiError(error));
+  }
+}
+
+export async function generatePdfReviewQuestions(payload: {
+  subject?: string;
+  lectureTitle: string;
+  pdfText: string;
+  pdfPages?: { page: number; text: string }[];
+}): Promise<{ reviewQuestions: QuizQuestion[] }> {
+  const generatePdfMax = toInt(process.env.AI_GENERATE_PDF_MAX_CHARS, LOW_TOKEN_MODE ? 3200 : 9000);
+  const pageOutlineMaxPages = toInt(process.env.AI_GENERATE_PAGE_CONTEXT_COUNT, LOW_TOKEN_MODE ? 8 : 14);
+  const pageOutlineTextMax = toInt(process.env.AI_GENERATE_PAGE_CONTEXT_MAX_CHARS, LOW_TOKEN_MODE ? 220 : 520);
+
+  const compactedPdf = compactContext(payload.pdfText, generatePdfMax);
+  const compactedPageOutline = (payload.pdfPages ?? [])
+    .slice(0, pageOutlineMaxPages)
+    .map((page) => `- ${page.page}페이지: ${compactContext(page.text, pageOutlineTextMax)}`)
+    .filter(Boolean)
+    .join('\n');
+
+  try {
+    return await generateGeminiJson<{ reviewQuestions: QuizQuestion[] }>({
+      model: LOW_TOKEN_MODE ? GEMINI_MODELS.text : GEMINI_MODELS.reasoning,
+      prompt: `
+너는 시험 대비용 퀴즈만 만드는 한국어 출제 AI다.
+반드시 PDF 본문과 페이지 개요를 실제로 분석한 뒤, 중요한 내용만 골라 짧고 명확한 퀴즈를 만들어라.
+
+반드시 지켜라:
+1) 출력은 JSON만.
+2) reviewQuestions는 ${LOW_TOKEN_MODE ? '4개' : '4~5개'}만 만든다.
+3) reviewQuestions의 type은 short/ox/mcq만 사용하고 세 유형이 고르게 섞이게 한다.
+4) short의 answer는 1~2문장 핵심답, ox의 answer는 반드시 O 또는 X, mcq는 options 4개와 correctOptionIndex 0~3을 반드시 포함한다.
+5) 모든 question/answer/hint/options/source는 반드시 한국어로 작성한다.
+6) 각 문제의 source는 PDF 본문 또는 페이지 개요에서 실제로 확인되는 짧은 근거 문구여야 한다.
+7) PDF에서 중요도가 낮은 주변 설명은 문제화하지 말고, 정의/원리/과정/비교/결론처럼 시험에 바로 나올 핵심만 고른다.
+8) source와 무관한 일반론/상식형 문제는 금지한다.
+9) 페이지 개요가 보여주는 실제 페이지 번호 흐름을 존중하고, 가능한 한 서로 다른 핵심 포인트를 문제로 만든다.
+10) hint는 한 줄 힌트로 작성하고 정답을 그대로 반복하지 마라.
+11) 과목이 수학/통계/공학 계열이더라도 수식이나 URL 자체를 그대로 외우게 하기보다, 그 의미나 역할을 묻는 문제를 우선한다.
+
+입력:
+- 과목: ${payload.subject ?? '미지정'}
+- 강의 제목: ${payload.lectureTitle}
+- PDF 본문: ${compactedPdf}
+- 페이지 개요:
+${compactedPageOutline || '- 페이지 개요 없음'}
+
+JSON 스키마 설명:
+reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint?:string, source:string, options?:string[], correctOptionIndex?:number}]
+`,
+      schema: {
+        type: 'object',
+        properties: {
           reviewQuestions: {
             type: 'array',
             items: {
@@ -306,9 +355,9 @@ reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint
               },
               required: ['type', 'question', 'answer', 'hint', 'source', 'options', 'correctOptionIndex'],
             },
-          }
+          },
         },
-        required: ['summary', 'examFocus', 'notesByPage', 'visuals', 'reviewQuestions']
+        required: ['reviewQuestions'],
       },
     });
   } catch (error) {

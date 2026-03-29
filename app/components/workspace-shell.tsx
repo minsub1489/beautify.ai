@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Languages, Moon, Paperclip, Pencil, Plus, Sun, Trash2, UploadCloud, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Languages, Moon, Paperclip, Pencil, Plus, Sun, Trash2, UploadCloud, X } from 'lucide-react';
 import { AuthControls } from './auth-controls';
 
 type ProjectItem = {
@@ -239,6 +239,33 @@ function getPageOrderSignature(items: PageEditorItem[]) {
   return items.map((item) => item.sourcePage).join(',');
 }
 
+function sanitizePageRangeInput(value: string) {
+  return value.replace(/[^\d]/g, '').slice(0, 4);
+}
+
+function normalizePageRange(startValue: string, endValue: string, pageCount: number) {
+  const safePageCount = Math.max(1, Math.trunc(pageCount || 1));
+  const parsedStart = Number.parseInt(startValue || '', 10);
+  const parsedEnd = Number.parseInt(endValue || '', 10);
+  const start = Number.isFinite(parsedStart) ? parsedStart : 1;
+  const end = Number.isFinite(parsedEnd) ? parsedEnd : safePageCount;
+  const boundedStart = Math.max(1, Math.min(safePageCount, start));
+  const boundedEnd = Math.max(1, Math.min(safePageCount, end));
+  return {
+    start: Math.min(boundedStart, boundedEnd),
+    end: Math.max(boundedStart, boundedEnd),
+  };
+}
+
+function sanitizeProjectDescription(value?: string | null) {
+  const text = (value || '').trim();
+  if (!text) return '';
+  if (text === '홈 화면에서 시작한 빈 프로젝트' || text === '홈 화면에서 시작한 빈프로젝트') {
+    return '';
+  }
+  return text;
+}
+
 export function WorkspaceShell({
   projects,
   selectedProject,
@@ -288,6 +315,10 @@ export function WorkspaceShell({
   const [autoRechargeEnabled, setAutoRechargeEnabled] = useState(false);
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
   const [workspaceView, setWorkspaceView] = useState<'notes' | 'quiz'>('notes');
+  const [notesRangeStart, setNotesRangeStart] = useState('1');
+  const [notesRangeEnd, setNotesRangeEnd] = useState('1');
+  const [quizRangeStart, setQuizRangeStart] = useState('1');
+  const [quizRangeEnd, setQuizRangeEnd] = useState('1');
   const [regeneratingPage, setRegeneratingPage] = useState<number | null>(null);
   const [pageRegenerationStatus, setPageRegenerationStatus] = useState('');
   const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({});
@@ -298,7 +329,6 @@ export function WorkspaceShell({
   const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
   const [quizAutoGenerating, setQuizAutoGenerating] = useState(false);
   const [quizAutoStatus, setQuizAutoStatus] = useState('');
-  const [quizAutoTriggeredFor, setQuizAutoTriggeredFor] = useState('');
   const [pdfEditMode, setPdfEditMode] = useState(false);
   const [pdfPageItems, setPdfPageItems] = useState<PageEditorItem[]>([]);
   const [pdfPageInitialOrder, setPdfPageInitialOrder] = useState<number[]>([]);
@@ -351,32 +381,38 @@ export function WorkspaceShell({
       .filter((asset) => asset.kind === 'pdf')
       .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0] || null;
   }, [selectedProject?.assets]);
-  const latestPdfCreatedAt = useMemo(() => {
-    if (!selectedProject?.assets?.length) return 0;
-    return selectedProject.assets
-      .filter((asset) => asset.kind === 'pdf')
-      .reduce((latest, asset) => Math.max(latest, new Date(asset.createdAt || 0).getTime()), 0);
-  }, [selectedProject?.assets]);
-  const latestRunCreatedAt = useMemo(
-    () => (selectedProject?.lastRun?.createdAt ? new Date(selectedProject.lastRun.createdAt).getTime() : 0),
-    [selectedProject?.lastRun?.createdAt],
+  const normalizedNotesRange = useMemo(
+    () => normalizePageRange(notesRangeStart, notesRangeEnd, currentPdfPageCount || 1),
+    [currentPdfPageCount, notesRangeEnd, notesRangeStart],
+  );
+  const normalizedQuizRange = useMemo(
+    () => normalizePageRange(quizRangeStart, quizRangeEnd, currentPdfPageCount || 1),
+    [currentPdfPageCount, quizRangeEnd, quizRangeStart],
+  );
+  const projectDescription = useMemo(
+    () => sanitizeProjectDescription(selectedProject?.description),
+    [selectedProject?.description],
   );
 
-  const basePreviewPdfUrl = useMemo(() => {
-    if (!selectedProject) return '';
+  const basePreviewAsset = useMemo(() => {
+    if (!selectedProject) return null;
 
     const latestOutput = [...selectedProject.assets]
       .reverse()
       .find((asset) => asset.kind === 'output_pdf');
-    if (latestOutput) return `/api/assets/${latestOutput.id}/raw`;
+    if (latestOutput) return latestOutput;
 
     const latestPdf = [...selectedProject.assets]
       .reverse()
       .find((asset) => asset.kind === 'pdf');
-    if (latestPdf) return `/api/assets/${latestPdf.id}/raw`;
+    if (latestPdf) return latestPdf;
 
-    return '';
+    return null;
   }, [selectedProject]);
+  const basePreviewPdfUrl = useMemo(() => {
+    if (!basePreviewAsset) return '';
+    return `/api/assets/${basePreviewAsset.id}/raw`;
+  }, [basePreviewAsset]);
 
   const previewPdfUrl = useMemo(() => {
     if (translationMode === 'translated' && translatedAssetId) {
@@ -384,6 +420,12 @@ export function WorkspaceShell({
     }
     return basePreviewPdfUrl;
   }, [basePreviewPdfUrl, translatedAssetId, translationMode]);
+  const previewDownloadName = useMemo(() => {
+    if (translationMode === 'translated' && translatedAssetId) {
+      return `${selectedProject?.title || 'translated'}-translated.pdf`;
+    }
+    return basePreviewAsset?.originalName || `${selectedProject?.title || 'document'}.pdf`;
+  }, [basePreviewAsset, selectedProject?.title, translatedAssetId, translationMode]);
   const buildPdfPagePreviewUrl = (page: number) => {
     if (!latestPdfAsset?.id) return '';
     return `/api/assets/${latestPdfAsset.id}/page-preview?page=${page}#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit`;
@@ -539,8 +581,23 @@ export function WorkspaceShell({
     setCurrentQuizIndex(0);
     setQuizAutoGenerating(false);
     setQuizAutoStatus('');
-    setQuizAutoTriggeredFor('');
   }, [selectedProject?.id, selectedProject?.lastRun?.questionsJson]);
+
+  useEffect(() => {
+    if (!latestPdfAsset?.id || !currentPdfPageCount) {
+      setNotesRangeStart('1');
+      setNotesRangeEnd('1');
+      setQuizRangeStart('1');
+      setQuizRangeEnd('1');
+      return;
+    }
+
+    const fullEnd = String(currentPdfPageCount);
+    setNotesRangeStart('1');
+    setNotesRangeEnd(fullEnd);
+    setQuizRangeStart('1');
+    setQuizRangeEnd(fullEnd);
+  }, [currentPdfPageCount, latestPdfAsset?.id]);
 
   useEffect(() => {
     if (!activeQuizItems.length) {
@@ -814,6 +871,18 @@ export function WorkspaceShell({
   function onAttachmentChange(event: ChangeEvent<HTMLInputElement>) {
     const picked = event.target.files ? Array.from(event.target.files) : [];
     setAttachmentNames(picked.map((file) => file.name));
+  }
+
+  function applyNotesRangeNormalization() {
+    const normalized = normalizePageRange(notesRangeStart, notesRangeEnd, currentPdfPageCount || 1);
+    setNotesRangeStart(String(normalized.start));
+    setNotesRangeEnd(String(normalized.end));
+  }
+
+  function applyQuizRangeNormalization() {
+    const normalized = normalizePageRange(quizRangeStart, quizRangeEnd, currentPdfPageCount || 1);
+    setQuizRangeStart(String(normalized.start));
+    setQuizRangeEnd(String(normalized.end));
   }
 
   async function toggleTranslation() {
@@ -1269,7 +1338,6 @@ export function WorkspaceShell({
       setRetryQuizMode(false);
       setRetryQuizItems([]);
       setCurrentQuizIndex(0);
-      setQuizAutoTriggeredFor('');
       setQuizAutoStatus('');
       setPageRegenerationStatus('');
       setPdfEditMode(false);
@@ -1343,18 +1411,24 @@ export function WorkspaceShell({
 
   async function autoGenerateQuiz() {
     if (!selectedProject?.id || quizAutoGenerating) return;
-    const triggerKey = `${selectedProject.id}:${latestPdfCreatedAt || 'no-pdf'}`;
+    if (!hasPdfAsset) {
+      setQuizAutoStatus('퀴즈를 만들려면 먼저 PDF를 업로드해 주세요.');
+      return;
+    }
+
+    const pageCount = currentPdfPageCount || 1;
+    const normalizedRange = normalizePageRange(quizRangeStart, quizRangeEnd, pageCount);
+
     setQuizAutoGenerating(true);
-    setQuizAutoStatus('PDF 핵심 내용을 분석해 퀴즈를 만드는 중...');
-    setQuizAutoTriggeredFor(triggerKey);
+    setQuizAutoStatus(`PDF ${normalizedRange.start}~${normalizedRange.end}페이지를 분석해 퀴즈를 만드는 중...`);
     try {
       const formData = new FormData();
       formData.set('projectId', selectedProject.id);
       formData.set('redirectTo', `/?projectId=${selectedProject.id}`);
-      formData.set(
-        'noteText',
-        '최신 PDF 본문을 실제로 분석해서 가장 중요한 내용만 골라 한국어 퀴즈 4~5개를 만들어줘. 각 문제는 자료 근거(source)가 보여야 하고, 단답형/OX/4지선다를 섞어줘.',
-      );
+      formData.set('mode', 'quiz');
+      formData.set('rangeStart', String(normalizedRange.start));
+      formData.set('rangeEnd', String(normalizedRange.end));
+      formData.set('noteText', '');
       formData.set('customNotes', '');
 
       const response = await fetch('/api/generate', {
@@ -1383,7 +1457,7 @@ export function WorkspaceShell({
         return;
       }
 
-      setQuizAutoStatus('PDF 분석 기반 퀴즈가 준비되었습니다.');
+      setQuizAutoStatus(`PDF ${normalizedRange.start}~${normalizedRange.end}페이지 기준 퀴즈가 준비되었습니다.`);
       router.refresh();
     } catch {
       setQuizAutoStatus('퀴즈 자동 생성 중 네트워크 오류가 발생했습니다.');
@@ -1391,27 +1465,6 @@ export function WorkspaceShell({
       setQuizAutoGenerating(false);
     }
   }
-
-  useEffect(() => {
-    if (workspaceView !== 'quiz') return;
-    if (!selectedProject?.id) return;
-    if (!hasPdfAsset) {
-      setQuizAutoStatus('퀴즈를 만들려면 먼저 PDF를 업로드해 주세요.');
-      return;
-    }
-    const needsRegeneration =
-      quizItems.length === 0 ||
-      !latestRunCreatedAt ||
-      (latestPdfCreatedAt > 0 && latestPdfCreatedAt > latestRunCreatedAt);
-
-    if (!needsRegeneration) {
-      setQuizAutoStatus('');
-      return;
-    }
-    const triggerKey = `${selectedProject.id}:${latestPdfCreatedAt || 'no-pdf'}`;
-    if (quizAutoTriggeredFor === triggerKey) return;
-    void autoGenerateQuiz();
-  }, [workspaceView, selectedProject?.id, hasPdfAsset, quizItems.length, latestPdfCreatedAt, latestRunCreatedAt, quizAutoTriggeredFor]);
 
   return (
     <div
@@ -1440,7 +1493,7 @@ export function WorkspaceShell({
             <form action="/api/projects" method="post">
               <input type="hidden" name="title" value="새 프로젝트" />
               <input type="hidden" name="subject" value="" />
-              <input type="hidden" name="description" value="홈 화면에서 시작한 빈 프로젝트" />
+              <input type="hidden" name="description" value="" />
               <button className="iconButton" type="submit" aria-label="새 프로젝트 만들기">
                 <Plus size={16} />
               </button>
@@ -1586,7 +1639,6 @@ export function WorkspaceShell({
       <section className="workspaceMain">
         <div className="topBar card">
           <div className="titleArea">
-            <div className="label">현재 작업 공간</div>
             <div className="workspaceTitleRow">
               {editingTitle ? (
                 <form
@@ -1625,7 +1677,7 @@ export function WorkspaceShell({
               )}
             </div>
             {titleError ? <div key={titleErrorTick} className="titleError titleErrorShake">{titleError}</div> : null}
-            <div className="muted">{selectedProject?.description || 'PDF를 드래그해서 넣고, 입력창에 요청을 적은 뒤 생성을 누르면 됩니다.'}</div>
+            <div className="muted">{projectDescription || 'PDF를 드래그해서 넣고, 입력창에 요청을 적은 뒤 생성을 누르면 됩니다.'}</div>
             {pdfName ? <div className="fileBadge">최근 드롭 PDF · {pdfName}</div> : null}
             {audioName ? <div className="fileBadge">최근 드롭 오디오 · {audioName}</div> : null}
           </div>
@@ -1685,6 +1737,17 @@ export function WorkspaceShell({
             <div className="previewHeader">
               <div className="sectionTitle">업로드 자료 미리보기</div>
               <div className="row">
+                {previewPdfUrl ? (
+                  <a
+                    className="button secondary"
+                    href={previewPdfUrl}
+                    download={previewDownloadName}
+                    title="현재 보고 있는 PDF 다운로드"
+                  >
+                    <Download size={16} />
+                    PDF 다운로드
+                  </a>
+                ) : null}
                 {previewPdfUrl ? (
                   <button
                     className="button secondary"
@@ -1940,6 +2003,9 @@ export function WorkspaceShell({
           <form className="card stack chatPanel" method="post" encType="multipart/form-data" onSubmit={handleGenerateSubmit}>
             <input type="hidden" name="projectId" value={selectedProject?.id || ''} />
             <input type="hidden" name="redirectTo" value="/" />
+            <input type="hidden" name="mode" value="notes" />
+            <input type="hidden" name="rangeStart" value={String(normalizedNotesRange.start)} />
+            <input type="hidden" name="rangeEnd" value={String(normalizedNotesRange.end)} />
             <input type="hidden" name="customNotes" value="" />
 
             <div className="viewToggle" role="tablist" aria-label="작업 보기 전환">
@@ -1964,6 +2030,59 @@ export function WorkspaceShell({
             </div>
             {workspaceView === 'notes' ? (
               <>
+                <div className="generationRangeCard">
+                  <div className="generationRangeHeader">
+                    <div>
+                      <div className="sectionTitle">필기 생성 범위</div>
+                      <div className="muted">
+                        현재 PDF의 {normalizedNotesRange.start}페이지부터 {normalizedNotesRange.end}페이지까지 분석해서 PDF 위에 필기를 넣습니다.
+                      </div>
+                    </div>
+                    <div className="generationRangeBadge">총 {currentPdfPageCount || 0}페이지</div>
+                  </div>
+                  <div className="generationRangeInputs">
+                    <label className="generationRangeField">
+                      <span>시작 페이지</span>
+                      <input
+                        className="input generationRangeInput"
+                        type="number"
+                        min={1}
+                        max={currentPdfPageCount || 1}
+                        inputMode="numeric"
+                        value={notesRangeStart}
+                        onChange={(event) => setNotesRangeStart(sanitizePageRangeInput(event.target.value))}
+                        onBlur={applyNotesRangeNormalization}
+                        disabled={!hasPdfAsset || isGenerating}
+                      />
+                    </label>
+                    <label className="generationRangeField">
+                      <span>끝 페이지</span>
+                      <input
+                        className="input generationRangeInput"
+                        type="number"
+                        min={1}
+                        max={currentPdfPageCount || 1}
+                        inputMode="numeric"
+                        value={notesRangeEnd}
+                        onChange={(event) => setNotesRangeEnd(sanitizePageRangeInput(event.target.value))}
+                        onBlur={applyNotesRangeNormalization}
+                        disabled={!hasPdfAsset || isGenerating}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="button secondary generationRangeReset"
+                      onClick={() => {
+                        const fullEnd = String(currentPdfPageCount || 1);
+                        setNotesRangeStart('1');
+                        setNotesRangeEnd(fullEnd);
+                      }}
+                      disabled={!hasPdfAsset || isGenerating}
+                    >
+                      전체 범위
+                    </button>
+                  </div>
+                </div>
                 <div className="composerRow">
                   <textarea
                     className="textarea composerInput"
@@ -2052,18 +2171,70 @@ export function WorkspaceShell({
             ) : (
               <div className="quizTabPanel">
                 <div className="quizAutoInline">
-                  {retryQuizMode ? <div className="badge">오답 재시험</div> : <div className="muted">PDF 핵심만 추려 간단한 퀴즈를 만듭니다.</div>}
+                  {retryQuizMode ? <div className="badge">오답 재시험</div> : <div className="muted">범위를 정한 뒤 PDF를 실제로 분석해서 한국어 퀴즈를 만듭니다.</div>}
                   {quizAutoStatus ? <div className="muted">상태: {quizAutoStatus}</div> : null}
+                </div>
+                <div className="generationRangeCard quizRangeCard">
+                  <div className="generationRangeHeader">
+                    <div>
+                      <div className="sectionTitle">퀴즈 출제 범위</div>
+                      <div className="muted">
+                        현재 PDF의 {normalizedQuizRange.start}페이지부터 {normalizedQuizRange.end}페이지까지 분석해서 중요한 부분만 문제로 냅니다.
+                      </div>
+                    </div>
+                    <div className="generationRangeBadge">총 {currentPdfPageCount || 0}페이지</div>
+                  </div>
+                  <div className="generationRangeInputs">
+                    <label className="generationRangeField">
+                      <span>시작 페이지</span>
+                      <input
+                        className="input generationRangeInput"
+                        type="number"
+                        min={1}
+                        max={currentPdfPageCount || 1}
+                        inputMode="numeric"
+                        value={quizRangeStart}
+                        onChange={(event) => setQuizRangeStart(sanitizePageRangeInput(event.target.value))}
+                        onBlur={applyQuizRangeNormalization}
+                        disabled={!hasPdfAsset || quizAutoGenerating}
+                      />
+                    </label>
+                    <label className="generationRangeField">
+                      <span>끝 페이지</span>
+                      <input
+                        className="input generationRangeInput"
+                        type="number"
+                        min={1}
+                        max={currentPdfPageCount || 1}
+                        inputMode="numeric"
+                        value={quizRangeEnd}
+                        onChange={(event) => setQuizRangeEnd(sanitizePageRangeInput(event.target.value))}
+                        onBlur={applyQuizRangeNormalization}
+                        disabled={!hasPdfAsset || quizAutoGenerating}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="button secondary generationRangeReset"
+                      onClick={() => {
+                        const fullEnd = String(currentPdfPageCount || 1);
+                        setQuizRangeStart('1');
+                        setQuizRangeEnd(fullEnd);
+                      }}
+                      disabled={!hasPdfAsset || quizAutoGenerating}
+                    >
+                      전체 범위
+                    </button>
+                  </div>
                   <button
                     type="button"
                     className="button generateButton"
                     disabled={quizAutoGenerating || !selectedProject?.id || !hasPdfAsset}
                     onClick={() => {
-                      setQuizAutoTriggeredFor('');
                       void autoGenerateQuiz();
                     }}
                   >
-                    {quizAutoGenerating ? '퀴즈 생성 중...' : '다시 생성'}
+                    {quizAutoGenerating ? '퀴즈 생성 중...' : activeQuizItems.length ? '퀴즈 다시 생성' : '퀴즈 생성'}
                   </button>
                 </div>
 

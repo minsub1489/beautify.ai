@@ -1,4 +1,4 @@
-import type { GenerationResult } from './types';
+import type { GenerationResult, QuizQuestion, VisualSpec } from './types';
 
 function cleanText(input: string) {
   return (input || '').replace(/\s+/g, ' ').trim();
@@ -147,23 +147,23 @@ function makeQuestions(quizFocus: string[]) {
   });
 }
 
-export function generateLocalStudyPack(input: {
+type LocalGenerationInput = {
   lectureTitle: string;
   pdfText: string;
   pdfPageTexts?: string[];
   transcriptText?: string;
   notionText?: string;
   customNotes?: string;
-}): GenerationResult {
+};
+
+export function generateLocalNotesPack(input: LocalGenerationInput): Pick<GenerationResult, 'summary' | 'examFocus' | 'notesByPage' | 'visuals'> {
   const mergedPdf = cleanText(input.pdfText);
   const mergedExtras = cleanText([input.transcriptText, input.notionText, input.customNotes].filter(Boolean).join('\n'));
   const subject = inferSubject(mergedPdf, input.lectureTitle);
   const examFocus = makeExamFocus(mergedPdf, mergedExtras);
   const notesByPage = makeNotesByPage(mergedPdf, input.pdfPageTexts);
-  const quizFocus = makeQuizFocus(mergedPdf, input.pdfPageTexts);
-  const questions = makeQuestions(quizFocus.length ? quizFocus : examFocus);
 
-  const visuals: GenerationResult['visuals'] = [];
+  const visuals: VisualSpec[] = [];
   if (subject === '수학') {
     visuals.push({
       title: '핵심 수식 카드',
@@ -215,7 +215,25 @@ export function generateLocalStudyPack(input: {
     examFocus,
     notesByPage,
     visuals,
-    reviewQuestions: questions,
+  };
+}
+
+export function generateLocalQuizPack(input: Pick<LocalGenerationInput, 'lectureTitle' | 'pdfText' | 'pdfPageTexts'>): { reviewQuestions: QuizQuestion[] } {
+  const mergedPdf = cleanText(input.pdfText);
+  const quizFocus = makeQuizFocus(mergedPdf, input.pdfPageTexts);
+  const fallbackFocus = quizFocus.length ? quizFocus : makeExamFocus(mergedPdf, '');
+
+  return {
+    reviewQuestions: makeQuestions(fallbackFocus),
+  };
+}
+
+export function generateLocalStudyPack(input: LocalGenerationInput): GenerationResult {
+  const notesPack = generateLocalNotesPack(input);
+  const quizPack = generateLocalQuizPack(input);
+  return {
+    ...notesPack,
+    reviewQuestions: quizPack.reviewQuestions,
   };
 }
 

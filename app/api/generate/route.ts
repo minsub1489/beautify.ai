@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateSchema } from '@/lib/validators';
-import { generateAnnotatedNotes } from '@/lib/ai';
+import { generateAnnotatedNotes, generatePdfReviewQuestions } from '@/lib/ai';
 import { readNotionPageBlocks } from '@/lib/notion';
 import { annotatePdfWithNotes, extractPdfText, extractPdfTextsByPage } from '@/lib/pdf';
 import { putBuffer } from '@/lib/storage';
@@ -9,7 +9,7 @@ import { getCurrentUserId } from '@/lib/auth-user';
 import { ensureBillingBootstrap } from '@/lib/billing/bootstrap';
 import { beginAiUsage, failAiUsage, finalizeAiUsage } from '@/lib/billing/usage';
 import { assertWithinRateLimit } from '@/lib/rate-limit';
-import { generateLocalStudyPack } from '@/lib/local-study';
+import { generateLocalNotesPack, generateLocalQuizPack } from '@/lib/local-study';
 
 export const maxDuration = 60;
 const LOW_TOKEN_MODE = (process.env.AI_LOW_TOKEN_MODE || '').toLowerCase() === 'true';
@@ -56,6 +56,25 @@ async function readPdfAssetBytes(asset: { storageKey: string; publicUrl: string 
   return Buffer.from(await response.arrayBuffer());
 }
 
+function parseRequestedPageRange(input: {
+  rangeStart?: string;
+  rangeEnd?: string;
+  pageCount: number;
+}) {
+  const pageCount = Math.max(1, Math.trunc(input.pageCount || 1));
+  const rawStart = Number.parseInt(input.rangeStart || '', 10);
+  const rawEnd = Number.parseInt(input.rangeEnd || '', 10);
+  const start = Number.isFinite(rawStart) ? rawStart : 1;
+  const end = Number.isFinite(rawEnd) ? rawEnd : pageCount;
+  const boundedStart = Math.max(1, Math.min(pageCount, start));
+  const boundedEnd = Math.max(1, Math.min(pageCount, end));
+
+  return {
+    start: Math.min(boundedStart, boundedEnd),
+    end: Math.max(boundedStart, boundedEnd),
+  };
+}
+
 export async function POST(req: Request) {
   let usageRequestId = '';
   try {
@@ -69,12 +88,16 @@ export async function POST(req: Request) {
       notionPageId: String(form.get('notionPageId') || ''),
       customNotes: String(form.get('customNotes') || ''),
       noteText: String(form.get('noteText') || ''),
+      mode: String(form.get('mode') || 'notes'),
+      rangeStart: String(form.get('rangeStart') || ''),
+      rangeEnd: String(form.get('rangeEnd') || ''),
       redirectTo: String(form.get('redirectTo') || '/'),
     });
 
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
     const redirectTo = parsed.data.redirectTo || '/';
+    const mode = parsed.data.mode;
     const noteText = parsed.data.noteText.trim();
 
     const directPdf = form.get('pdf');
@@ -216,7 +239,7 @@ export async function POST(req: Request) {
     });
   }
 
-    if (noteText) {
+    if (noteText && mode === 'notes') {
       await prisma.projectMessage.create({
         data: {
           projectId,
@@ -237,7 +260,11 @@ export async function POST(req: Request) {
 
     const projectForGeneration = await prisma.project.findUnique({
       where: { id: projectId },
-      include: { assets: true, messages: { orderBy: { createdAt: 'asc' } } },
+      include: {
+        assets: true,
+        messages: { orderBy: { createdAt: 'asc' } },
+        runs: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
     });
 
     if (!projectForGeneration) {
@@ -257,6 +284,19 @@ export async function POST(req: Request) {
       publicUrl: latestPdf.publicUrl,
     });
     const pdfPageTexts = await extractPdfTextsByPage(originalPdf);
+    const requestedRange = parseRequestedPageRange({
+      rangeStart: parsed.data.rangeStart,
+      rangeEnd: parsed.data.rangeEnd,
+      pageCount: pdfPageTexts.length,
+    });
+    const selectedPdfPages = pdfPageTexts
+      .slice(requestedRange.start - 1, requestedRange.end)
+      .map((text, index) => ({
+        page: requestedRange.start + index,
+        text,
+      }));
+    const selectedPdfText = selectedPdfPages.map((page) => page.text).filter(Boolean).join('\n\n');
+    const latestRun = projectForGeneration.runs[0] || null;
 
     const transcriptText = projectForGeneration.assets
       .filter((asset) => asset.kind === 'audio')
@@ -281,9 +321,11 @@ export async function POST(req: Request) {
       feature: 'annotated_notes_generation',
       model: process.env.GEMINI_REASONING_MODEL || process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash-lite',
       inputText: [
+        mode,
+        `${requestedRange.start}-${requestedRange.end}`,
         projectForGeneration.title,
         projectForGeneration.subject || '',
-        latestPdf.extractedText || '',
+        selectedPdfText || latestPdf.extractedText || '',
         transcriptText,
         notionText,
         mergedNotes,
@@ -295,82 +337,142 @@ export async function POST(req: Request) {
     });
     usageRequestId = usageGuard.requestId;
 
-    let result;
-    if (LOCAL_PIPELINE_MODE) {
-      result = generateLocalStudyPack({
-        lectureTitle: projectForGeneration.title,
-        pdfText: latestPdf.extractedText || '',
-        pdfPageTexts,
-        transcriptText,
-        notionText,
-        customNotes: mergedNotes,
-      });
-    } else {
-      try {
-        result = await generateAnnotatedNotes({
-          subject: projectForGeneration.subject ?? '미지정',
+    if (mode === 'notes') {
+      let result;
+      if (LOCAL_PIPELINE_MODE) {
+        result = generateLocalNotesPack({
           lectureTitle: projectForGeneration.title,
-          pdfText: latestPdf.extractedText || '',
-          pdfPages: pdfPageTexts.map((text, index) => ({ page: index + 1, text })),
+          pdfText: selectedPdfText || latestPdf.extractedText || '',
+          pdfPageTexts: selectedPdfPages.map((page) => page.text),
           transcriptText,
           notionText,
           customNotes: mergedNotes,
         });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : '';
-        if (/quota|rate limit|429|insufficient_quota|RESOURCE_EXHAUSTED/i.test(message)) {
-          result = generateLocalStudyPack({
+      } else {
+        try {
+          result = await generateAnnotatedNotes({
+            subject: projectForGeneration.subject ?? '미지정',
             lectureTitle: projectForGeneration.title,
-            pdfText: latestPdf.extractedText || '',
-            pdfPageTexts,
+            pdfText: selectedPdfText || latestPdf.extractedText || '',
+            pdfPages: selectedPdfPages,
             transcriptText,
             notionText,
             customNotes: mergedNotes,
           });
-        } else {
-          throw error;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '';
+          if (/quota|rate limit|429|insufficient_quota|RESOURCE_EXHAUSTED/i.test(message)) {
+            result = generateLocalNotesPack({
+              lectureTitle: projectForGeneration.title,
+              pdfText: selectedPdfText || latestPdf.extractedText || '',
+              pdfPageTexts: selectedPdfPages.map((page) => page.text),
+              transcriptText,
+              notionText,
+              customNotes: mergedNotes,
+            });
+          } else {
+            throw error;
+          }
         }
       }
+
+      const annotated = await annotatePdfWithNotes({ originalPdf, notesByPage: result.notesByPage, visuals: result.visuals });
+      const out = await putBuffer({ bytes: annotated, filename: `${projectForGeneration.title}-annotated.pdf`, contentType: 'application/pdf', folder: 'output' });
+
+      const outputAsset = await prisma.asset.create({
+        data: {
+          projectId: projectForGeneration.id,
+          kind: 'output_pdf',
+          originalName: `${projectForGeneration.title}-annotated.pdf`,
+          mimeType: 'application/pdf',
+          size: annotated.length,
+          storageKey: out.storageKey,
+          publicUrl: out.publicUrl,
+        },
+      });
+
+      await prisma.generationRun.create({
+        data: {
+          projectId: projectForGeneration.id,
+          customNotes: mergedNotes,
+          notionPageId: parsed.data.notionPageId || '',
+          notionExtract: notionText,
+          transcriptExtract: transcriptText,
+          summary: result.summary,
+          examFocusJson: result.examFocus,
+          notesByPageJson: result.notesByPage,
+          visualsJson: result.visuals,
+          questionsJson: latestRun?.questionsJson ?? undefined,
+          outputAssetId: outputAsset.id,
+        },
+      });
+
+      await finalizeAiUsage({
+        requestId: usageRequestId,
+        outputText: JSON.stringify(result),
+        metadata: {
+          mode,
+          rangeStart: requestedRange.start,
+          rangeEnd: requestedRange.end,
+          outputAssetId: outputAsset.id,
+        },
+      });
+    } else {
+      let result;
+      if (LOCAL_PIPELINE_MODE) {
+        result = generateLocalQuizPack({
+          lectureTitle: projectForGeneration.title,
+          pdfText: selectedPdfText || latestPdf.extractedText || '',
+          pdfPageTexts: selectedPdfPages.map((page) => page.text),
+        });
+      } else {
+        try {
+          result = await generatePdfReviewQuestions({
+            subject: projectForGeneration.subject ?? '미지정',
+            lectureTitle: projectForGeneration.title,
+            pdfText: selectedPdfText || latestPdf.extractedText || '',
+            pdfPages: selectedPdfPages,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '';
+          if (/quota|rate limit|429|insufficient_quota|RESOURCE_EXHAUSTED/i.test(message)) {
+            result = generateLocalQuizPack({
+              lectureTitle: projectForGeneration.title,
+              pdfText: selectedPdfText || latestPdf.extractedText || '',
+              pdfPageTexts: selectedPdfPages.map((page) => page.text),
+            });
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      await prisma.generationRun.create({
+        data: {
+          projectId: projectForGeneration.id,
+          customNotes: mergedNotes,
+          notionPageId: parsed.data.notionPageId || '',
+          notionExtract: notionText,
+          transcriptExtract: transcriptText,
+          summary: latestRun?.summary ?? undefined,
+          examFocusJson: latestRun?.examFocusJson ?? undefined,
+          notesByPageJson: latestRun?.notesByPageJson ?? undefined,
+          visualsJson: latestRun?.visualsJson ?? undefined,
+          questionsJson: result.reviewQuestions,
+          outputAssetId: latestRun?.outputAssetId ?? null,
+        },
+      });
+
+      await finalizeAiUsage({
+        requestId: usageRequestId,
+        outputText: JSON.stringify(result),
+        metadata: {
+          mode,
+          rangeStart: requestedRange.start,
+          rangeEnd: requestedRange.end,
+        },
+      });
     }
-
-    const annotated = await annotatePdfWithNotes({ originalPdf, notesByPage: result.notesByPage, visuals: result.visuals });
-    const out = await putBuffer({ bytes: annotated, filename: `${projectForGeneration.title}-annotated.pdf`, contentType: 'application/pdf', folder: 'output' });
-
-    const outputAsset = await prisma.asset.create({
-      data: {
-        projectId: projectForGeneration.id,
-        kind: 'output_pdf',
-        originalName: `${projectForGeneration.title}-annotated.pdf`,
-        mimeType: 'application/pdf',
-        size: annotated.length,
-        storageKey: out.storageKey,
-        publicUrl: out.publicUrl,
-      },
-    });
-
-    await prisma.generationRun.create({
-      data: {
-        projectId: projectForGeneration.id,
-        customNotes: mergedNotes,
-        notionPageId: parsed.data.notionPageId || '',
-        notionExtract: notionText,
-        transcriptExtract: transcriptText,
-        summary: result.summary,
-        examFocusJson: result.examFocus,
-        notesByPageJson: result.notesByPage,
-        visualsJson: result.visuals,
-        questionsJson: result.reviewQuestions,
-        outputAssetId: outputAsset.id,
-      },
-    });
-
-    await finalizeAiUsage({
-      requestId: usageRequestId,
-      outputText: JSON.stringify(result),
-      metadata: {
-        outputAssetId: outputAsset.id,
-      },
-    });
 
     return NextResponse.redirect(new URL(`${redirectTo}?projectId=${projectForGeneration.id}`, req.url), 303);
   } catch (error) {
