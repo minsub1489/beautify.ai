@@ -88,8 +88,21 @@ function makeExamFocus(pdfText: string, customNotes: string) {
   return lines.slice(0, 6);
 }
 
-function makeQuestions(examFocus: string[]) {
-  const base = examFocus.slice(0, 5);
+function makeQuizFocus(pdfText: string, pdfPageTexts?: string[]) {
+  const fromPages = (pdfPageTexts ?? [])
+    .flatMap((pageText) => topSentences(pageText, 2))
+    .map((line) => cleanText(line))
+    .filter(Boolean);
+
+  const base = (fromPages.length ? fromPages : topSentences(pdfText, 10))
+    .map((line) => cleanText(line))
+    .filter(Boolean);
+
+  return base.slice(0, 5);
+}
+
+function makeQuestions(quizFocus: string[]) {
+  const base = quizFocus.slice(0, 5);
   const snippets = base.map((line) => cleanText(line).slice(0, 90));
   return base.map((focus, idx) => {
     const source = snippets[idx] || cleanText(focus).slice(0, 90);
@@ -147,7 +160,8 @@ export function generateLocalStudyPack(input: {
   const subject = inferSubject(mergedPdf, input.lectureTitle);
   const examFocus = makeExamFocus(mergedPdf, mergedExtras);
   const notesByPage = makeNotesByPage(mergedPdf, input.pdfPageTexts);
-  const questions = makeQuestions(examFocus);
+  const quizFocus = makeQuizFocus(mergedPdf, input.pdfPageTexts);
+  const questions = makeQuestions(quizFocus.length ? quizFocus : examFocus);
 
   const visuals: GenerationResult['visuals'] = [];
   if (subject === '수학') {

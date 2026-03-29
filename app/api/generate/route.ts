@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateSchema } from '@/lib/validators';
-import { generateAnnotatedNotes, inferSubjectFromMaterials } from '@/lib/ai';
+import { generateAnnotatedNotes } from '@/lib/ai';
 import { readNotionPageBlocks } from '@/lib/notion';
 import { annotatePdfWithNotes, extractPdfText, extractPdfTextsByPage } from '@/lib/pdf';
 import { putBuffer } from '@/lib/storage';
-import { transcribeAudioFromBuffer } from '@/lib/transcribe';
 import { getCurrentUserId } from '@/lib/auth-user';
 import { ensureBillingBootstrap } from '@/lib/billing/bootstrap';
 import { beginAiUsage, failAiUsage, finalizeAiUsage } from '@/lib/billing/usage';
@@ -20,11 +19,6 @@ function inferTitleFromFiles(pdfName: string, fallbackName?: string) {
   const source = pdfName || fallbackName || '새 프로젝트';
   const stripped = source.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
   return stripped || '새 프로젝트';
-}
-
-function titleFromSubject(subject?: string, broadSubject?: string) {
-  const cleaned = (subject || broadSubject || '').replace(/\s+/g, ' ').trim();
-  return cleaned || '새 프로젝트';
 }
 
 function titleFromText(text: string) {
@@ -124,15 +118,12 @@ export async function POST(req: Request) {
 
     const projectId = project.id;
     const noteSources: string[] = [];
-    const uploadedPdfTexts: string[] = [];
-    const uploadedTranscripts: string[] = [];
 
     for (const file of attachments) {
       const bytes = Buffer.from(await file.arrayBuffer());
 
     if (isPdf(file)) {
       const extracted = await extractPdfText(bytes);
-      uploadedPdfTexts.push(extracted);
       const stored = await putBuffer({
         bytes,
         filename: file.name,
@@ -156,8 +147,6 @@ export async function POST(req: Request) {
     }
 
     if (isAudio(file)) {
-      const transcript = await transcribeAudioFromBuffer(bytes, file.name, file.type || 'audio/mpeg');
-      uploadedTranscripts.push(transcript);
       const stored = await putBuffer({
         bytes,
         filename: file.name,
@@ -174,7 +163,7 @@ export async function POST(req: Request) {
           size: bytes.length,
           storageKey: stored.storageKey,
           publicUrl: stored.publicUrl,
-          extractedText: transcript,
+          extractedText: '',
         },
       });
       continue;
@@ -244,52 +233,6 @@ export async function POST(req: Request) {
 
     if (!projectWithAssets) {
       return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다.' }, { status: 404 });
-    }
-
-    const allPdfText = projectWithAssets.assets
-      .filter((asset) => asset.kind === 'pdf')
-      .map((asset) => asset.extractedText || '')
-      .join('\n');
-
-    const allTranscriptText = projectWithAssets.assets
-      .filter((asset) => asset.kind === 'audio')
-      .map((asset) => asset.extractedText || '')
-      .join('\n');
-
-    const subjectBaseText = uploadedPdfTexts.join('\n') || allPdfText;
-    const transcriptBaseText = uploadedTranscripts.join('\n') || allTranscriptText;
-
-    if (!LOW_TOKEN_MODE && (subjectBaseText || transcriptBaseText)) {
-      try {
-        const inferred = await inferSubjectFromMaterials({
-          title: projectWithAssets.title,
-          description: projectWithAssets.description || '',
-          pdfText: subjectBaseText,
-          transcriptText: transcriptBaseText,
-        });
-
-        const titleNeedsUpdate =
-          projectWithAssets.title === '새 프로젝트' ||
-          projectWithAssets.description === '홈 화면 업로드로 자동 생성된 프로젝트' ||
-          projectWithAssets.description === '통합 입력으로 자동 생성된 프로젝트';
-
-        await prisma.project.update({
-          where: { id: projectId },
-          data: {
-            title: subjectBaseText && titleNeedsUpdate
-              ? titleFromSubject(inferred.subject, inferred.broadSubject)
-              : projectWithAssets.title,
-            subject: projectWithAssets.subject?.trim() ? projectWithAssets.subject : inferred.subject,
-            description: projectWithAssets.description?.trim() &&
-              projectWithAssets.description !== '홈 화면 업로드로 자동 생성된 프로젝트' &&
-              projectWithAssets.description !== '통합 입력으로 자동 생성된 프로젝트'
-              ? projectWithAssets.description
-              : `AI 자동 분석: ${inferred.subject} (${inferred.broadSubject})`,
-          },
-        });
-      } catch (error) {
-        console.error('subject inference failed', error);
-      }
     }
 
     const projectForGeneration = await prisma.project.findUnique({

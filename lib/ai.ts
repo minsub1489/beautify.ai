@@ -141,15 +141,16 @@ export async function generateAnnotatedNotes(payload: {
 15) 코딩/AI 계열이면 개념 정의뿐 아니라 "입력→처리→출력", 함수 역할, 모델 흐름, 학습 포인트, 자주 틀리는 부분을 강조하라.
 16) 딥러닝/AI 계열이면 수식이 있더라도 직관, 손실함수 의미, 역전파/학습 흐름, 모델 비교를 학생이 이해하기 쉽게 바꿔라.
 17) 사용자가 메모를 채팅처럼 여러 개 넣었으면 각 메모를 모두 반영하라.
-18) reviewQuestions는 ${LOW_TOKEN_MODE ? '4개' : '4~5개'}만 만들고, PDF에서 가장 중요한 부분만 추려 간단하고 선명하게 출제해라.
+18) reviewQuestions는 ${LOW_TOKEN_MODE ? '4개' : '4~5개'}만 만들고, 반드시 PDF 본문과 페이지 개요만 분석해서 출제해라.
 19) reviewQuestions의 type은 short/ox/mcq만 사용하고, 세 유형이 고르게 섞이게 만들어라.
 20) short: answer는 1~2문장 핵심답. ox: answer는 반드시 O 또는 X 중 하나. mcq: options는 반드시 4개, correctOptionIndex는 0~3.
 21) 모든 quiz question/answer/hint/options/source는 반드시 한국어로 작성해라.
-22) 각 문제마다 source에 PDF 본문에서 실제로 확인되는 출제 근거 문구(짧은 발췌)를 넣어라.
-23) source와 무관한 일반론/상식형 문제는 금지한다.
-24) PDF에서 중요도가 낮은 주변 설명은 문제화하지 말고, 정의/원리/과정/비교/결론처럼 시험에 바로 나올 핵심만 고른다.
-25) hint는 한 줄 힌트로 작성하고, 답을 그대로 반복하지 말아라.
-26) formula를 만들 때 expression은 가능한 한 짧고 읽기 쉬운 식/의사수식으로 적고, meaning/example은 학생이 이해하기 쉬운 한국어로 적는다.
+22) 각 문제마다 source에 PDF 본문 또는 페이지 개요에서 실제로 확인되는 출제 근거 문구(짧은 발췌)를 넣어라.
+23) transcript/notion/customNotes는 notesByPage 보조용일 뿐, reviewQuestions의 근거로 사용하면 안 된다.
+24) source와 무관한 일반론/상식형 문제는 금지한다.
+25) PDF에서 중요도가 낮은 주변 설명은 문제화하지 말고, 정의/원리/과정/비교/결론처럼 시험에 바로 나올 핵심만 고른다.
+26) hint는 한 줄 힌트로 작성하고, 답을 그대로 반복하지 말아라.
+27) formula를 만들 때 expression은 가능한 한 짧고 읽기 쉬운 식/의사수식으로 적고, meaning/example은 학생이 이해하기 쉬운 한국어로 적는다.
 
 입력:
 - 과목: ${payload.subject ?? '미지정'}

@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { putBuffer } from '@/lib/storage';
 import { extractPdfText } from '@/lib/pdf';
-import { transcribeAudioFromBuffer } from '@/lib/transcribe';
-import { inferSubjectFromMaterials } from '@/lib/ai';
 
 export const maxDuration = 60;
 
@@ -11,11 +9,6 @@ function inferTitleFromFiles(pdfName: string, audioName?: string) {
   const source = pdfName || audioName || '새 프로젝트';
   const stripped = source.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
   return stripped || '새 프로젝트';
-}
-
-function titleFromSubject(subject?: string, broadSubject?: string) {
-  const cleaned = (subject || broadSubject || '').replace(/\s+/g, ' ').trim();
-  return cleaned || '새 프로젝트';
 }
 
 export async function POST(req: Request) {
@@ -50,7 +43,6 @@ export async function POST(req: Request) {
   }
 
   let pdfText = '';
-  let transcript = '';
 
   if (pdfFile) {
     const pdfBuffer = Buffer.from(await pdfFile.arrayBuffer());
@@ -78,7 +70,6 @@ export async function POST(req: Request) {
 
   if (audioFile && audioFile.size > 0) {
     const audioBuffer = Buffer.from(await audioFile.arrayBuffer());
-    transcript = await transcribeAudioFromBuffer(audioBuffer, audioFile.name, audioFile.type || 'audio/mpeg');
     const audioStored = await putBuffer({
       bytes: audioBuffer,
       filename: audioFile.name,
@@ -95,35 +86,9 @@ export async function POST(req: Request) {
         size: audioBuffer.length,
         storageKey: audioStored.storageKey,
         publicUrl: audioStored.publicUrl,
-        extractedText: transcript,
+        extractedText: '',
       },
     });
-  }
-
-  try {
-    const inferred = await inferSubjectFromMaterials({
-      title: project.title,
-      description: project.description || '',
-      pdfText,
-      transcriptText: transcript,
-    });
-
-    const titleNeedsUpdate = project.title === '새 프로젝트' || project.description === '홈 화면 업로드로 자동 생성된 프로젝트';
-
-    await prisma.project.update({
-      where: { id: projectId },
-      data: {
-        title: titleNeedsUpdate && pdfFile
-          ? titleFromSubject(inferred.subject, inferred.broadSubject)
-          : (titleNeedsUpdate ? inferTitleFromFiles(pdfFile?.name || '', audioFile?.name) : project.title),
-        subject: project.subject?.trim() ? project.subject : inferred.subject,
-        description: project.description?.trim() && project.description !== '홈 화면 업로드로 자동 생성된 프로젝트'
-          ? project.description
-          : `AI 자동 분석: ${inferred.subject} (${inferred.broadSubject})`,
-      },
-    });
-  } catch (error) {
-    console.error('subject inference failed', error);
   }
 
   return NextResponse.redirect(new URL(`${redirectTo}?projectId=${projectId}`, req.url), 303);
