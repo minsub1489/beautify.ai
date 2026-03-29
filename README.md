@@ -134,6 +134,10 @@ GOOGLE_CLIENT_SECRET=
 - 실행 중 `Unknown argument sortOrder` 같은 오류가 나면 Prisma Client가 예전 상태일 수 있으니 서버를 재시작하세요
 - 민감정보는 커밋하지 말고 `.env.example`만 추적하세요
 
+## 설계 문서
+
+- [비회원 PDF 체험 → 회원 전환 시 데이터 보존 설계](/Users/minsub/Documents/beautify-ai/beautify/docs/guest-to-member-preservation.md)
+
 ## 이름
 
 이 프로젝트의 앱 이름은 `Beautify`입니다.
