@@ -40,6 +40,184 @@ function compactContext(text: string, maxChars: number, keywordBias = true) {
   return picked.join('\n');
 }
 
+function splitStudySentences(text: string) {
+  return (text || '')
+    .replace(/\s+/g, ' ')
+    .split(/(?<=[.!?])\s+|(?<=다\.|요\.|니다\.)\s+/)
+    .map((line) => line.trim())
+    .filter((line) => line.length >= 16);
+}
+
+function buildQuizEvidence(payload: {
+  pdfText: string;
+  pdfPages?: { page: number; text: string }[];
+  maxPages: number;
+  evidencePerPage: number;
+  evidenceTextMax: number;
+  maxTotalChars: number;
+}) {
+  const priority = /핵심|중요|시험|정의|원리|과정|비교|주의|공식|결론|요약|포인트|알고리즘|모델|함수|증명|예시|단계|특징|장단점/i;
+  const evidenceSources: string[] = [];
+  const evidenceLines: string[] = [];
+  let used = 0;
+
+  const pages = (payload.pdfPages ?? [])
+    .filter((page) => (page.text || '').trim())
+    .slice(0, payload.maxPages);
+
+  for (const page of pages) {
+    const ranked = splitStudySentences(page.text)
+      .sort((a, b) => {
+        const aScore = (priority.test(a) ? 80 : 0) + Math.min(60, a.length);
+        const bScore = (priority.test(b) ? 80 : 0) + Math.min(60, b.length);
+        return bScore - aScore;
+      })
+      .slice(0, payload.evidencePerPage);
+
+    const snippets = ranked.length
+      ? ranked
+      : [compactContext(page.text, payload.evidenceTextMax, true)].filter(Boolean);
+
+    for (const snippet of snippets) {
+      const clipped = compactContext(snippet, payload.evidenceTextMax, false);
+      if (!clipped) continue;
+      const line = `${page.page}페이지: ${clipped}`;
+      if (used + line.length + 1 > payload.maxTotalChars) break;
+      evidenceLines.push(`- ${line}`);
+      evidenceSources.push(line);
+      used += line.length + 1;
+    }
+
+    if (used >= payload.maxTotalChars) break;
+  }
+
+  if (!evidenceLines.length) {
+    const fallback = compactContext(payload.pdfText, Math.min(payload.maxTotalChars, payload.evidenceTextMax * 4));
+    if (fallback) {
+      evidenceLines.push(`- 1페이지: ${fallback}`);
+      evidenceSources.push(`1페이지: ${fallback}`);
+    }
+  }
+
+  return {
+    evidenceText: evidenceLines.join('\n'),
+    evidenceSources,
+  };
+}
+
+function normalizeQuizCompareText(text: string) {
+  return (text || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/["'`()[\]{}]/g, '')
+    .trim();
+}
+
+function tokenizeQuizText(text: string) {
+  return normalizeQuizCompareText(text)
+    .split(/[^a-z0-9가-힣]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2);
+}
+
+function quizTextHasEnoughKorean(text: string) {
+  const korean = (text.match(/[가-힣]/g) || []).length;
+  return korean >= 2;
+}
+
+function sourceLooksGrounded(source: string, evidenceSources: string[]) {
+  const normalizedSource = normalizeQuizCompareText(source).replace(/^\d+\s*페이지\s*[:·-]?\s*/i, '');
+  if (!normalizedSource) return false;
+
+  return evidenceSources.some((evidence) => {
+    const normalizedEvidence = normalizeQuizCompareText(evidence).replace(/^\d+\s*페이지\s*[:·-]?\s*/i, '');
+    if (!normalizedEvidence) return false;
+    if (normalizedEvidence.includes(normalizedSource) || normalizedSource.includes(normalizedEvidence.slice(0, 24))) {
+      return true;
+    }
+
+    const tokens = tokenizeQuizText(normalizedSource);
+    if (!tokens.length) return false;
+    const overlap = tokens.filter((token) => normalizedEvidence.includes(token)).length;
+    return overlap >= Math.min(3, tokens.length);
+  });
+}
+
+type GroundedQuizQuestion = QuizQuestion & {
+  concept?: string | null;
+  sourcePage?: number | null;
+};
+
+function normalizeGroundedQuizQuestions(rawQuestions: GroundedQuizQuestion[]) {
+  return rawQuestions.map((item) => {
+    const type = item.type === 'ox' || item.type === 'mcq' || item.type === 'short' ? item.type : 'short';
+    const sourcePage = Number.isFinite(item.sourcePage) && Number(item.sourcePage) > 0
+      ? Math.trunc(Number(item.sourcePage))
+      : undefined;
+    const source = (item.source || '').trim();
+    const sourceWithPage = sourcePage && !/^\d+\s*페이지/i.test(source)
+      ? `${sourcePage}페이지: ${source}`
+      : source;
+
+    return {
+      ...item,
+      type,
+      question: (item.question || '').trim(),
+      answer: (item.answer || '').trim(),
+      hint: (item.hint || '').trim(),
+      source: sourceWithPage.trim(),
+      options: Array.isArray(item.options)
+        ? item.options.map((option) => (option || '').trim()).filter(Boolean).slice(0, 4)
+        : undefined,
+      correctOptionIndex: typeof item.correctOptionIndex === 'number' ? item.correctOptionIndex : undefined,
+    };
+  });
+}
+
+function validateGroundedQuizQuestions(questions: GroundedQuizQuestion[], evidenceSources: string[]) {
+  const normalized = normalizeGroundedQuizQuestions(questions);
+  const problems: string[] = [];
+
+  if (normalized.length < 4) {
+    problems.push('문항 수가 너무 적습니다.');
+  }
+
+  for (const [index, item] of normalized.entries()) {
+    const label = `${index + 1}번 문제`;
+    if (!item.question || !quizTextHasEnoughKorean(item.question)) {
+      problems.push(`${label} 질문이 한국어로 충분히 작성되지 않았습니다.`);
+    }
+    if (!item.answer || (item.type !== 'ox' && !quizTextHasEnoughKorean(item.answer))) {
+      problems.push(`${label} 정답이 부정확합니다.`);
+    }
+    if (!item.hint || !quizTextHasEnoughKorean(item.hint)) {
+      problems.push(`${label} 힌트가 비어 있거나 한국어 설명이 부족합니다.`);
+    }
+    if (!item.source || !sourceLooksGrounded(item.source, evidenceSources)) {
+      problems.push(`${label} 출제 근거가 PDF 근거와 맞지 않습니다.`);
+    }
+    if (/(다음\s*자료|자료\s*문장|자료\s*내용|pdf\s*본문)/i.test(item.question)) {
+      problems.push(`${label} 질문이 너무 일반적입니다.`);
+    }
+    if (item.type === 'ox' && !/^(O|X)$/i.test(item.answer.trim())) {
+      problems.push(`${label} OX 정답 형식이 올바르지 않습니다.`);
+    }
+    if (item.type === 'mcq') {
+      if (!item.options || item.options.length !== 4) {
+        problems.push(`${label} 4지선다 보기가 정확히 4개가 아닙니다.`);
+      }
+      if (typeof item.correctOptionIndex !== 'number' || item.correctOptionIndex < 0 || item.correctOptionIndex > 3) {
+        problems.push(`${label} 정답 보기 인덱스가 올바르지 않습니다.`);
+      }
+    }
+  }
+
+  return {
+    normalized,
+    problems,
+  };
+}
+
 export async function inferSubjectFromMaterials(payload: {
   title: string;
   description?: string;
@@ -289,9 +467,11 @@ export async function generatePdfReviewQuestions(payload: {
   pdfText: string;
   pdfPages?: { page: number; text: string }[];
 }): Promise<{ reviewQuestions: QuizQuestion[] }> {
-  const generatePdfMax = toInt(process.env.AI_GENERATE_PDF_MAX_CHARS, LOW_TOKEN_MODE ? 3200 : 9000);
-  const pageOutlineMaxPages = toInt(process.env.AI_GENERATE_PAGE_CONTEXT_COUNT, LOW_TOKEN_MODE ? 8 : 14);
-  const pageOutlineTextMax = toInt(process.env.AI_GENERATE_PAGE_CONTEXT_MAX_CHARS, LOW_TOKEN_MODE ? 220 : 520);
+  const generatePdfMax = toInt(process.env.AI_GENERATE_PDF_MAX_CHARS, LOW_TOKEN_MODE ? 4200 : 14000);
+  const pageOutlineMaxPages = toInt(process.env.AI_GENERATE_PAGE_CONTEXT_COUNT, LOW_TOKEN_MODE ? 10 : 18);
+  const pageOutlineTextMax = toInt(process.env.AI_GENERATE_PAGE_CONTEXT_MAX_CHARS, LOW_TOKEN_MODE ? 260 : 700);
+  const evidencePerPage = toInt(process.env.AI_QUIZ_EVIDENCE_PER_PAGE, LOW_TOKEN_MODE ? 2 : 3);
+  const evidenceTotalMax = toInt(process.env.AI_QUIZ_EVIDENCE_TOTAL_MAX_CHARS, LOW_TOKEN_MODE ? 3800 : 9000);
 
   const compactedPdf = compactContext(payload.pdfText, generatePdfMax);
   const compactedPageOutline = (payload.pdfPages ?? [])
@@ -299,67 +479,115 @@ export async function generatePdfReviewQuestions(payload: {
     .map((page) => `- ${page.page}페이지: ${compactContext(page.text, pageOutlineTextMax)}`)
     .filter(Boolean)
     .join('\n');
+  const quizEvidence = buildQuizEvidence({
+    pdfText: payload.pdfText,
+    pdfPages: payload.pdfPages,
+    maxPages: pageOutlineMaxPages,
+    evidencePerPage,
+    evidenceTextMax: pageOutlineTextMax,
+    maxTotalChars: evidenceTotalMax,
+  });
 
-  try {
-    return await generateGeminiJson<{ reviewQuestions: QuizQuestion[] }>({
-      model: LOW_TOKEN_MODE ? GEMINI_MODELS.text : GEMINI_MODELS.reasoning,
-      prompt: `
+  const schema = {
+    type: 'object',
+    properties: {
+      reviewQuestions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            type: { type: 'string', enum: ['short', 'ox', 'mcq'] },
+            concept: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+            sourcePage: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+            question: { type: 'string' },
+            answer: { type: 'string' },
+            hint: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+            source: { type: 'string' },
+            options: {
+              anyOf: [
+                { type: 'null' },
+                { type: 'array', items: { type: 'string' } },
+              ],
+            },
+            correctOptionIndex: {
+              anyOf: [{ type: 'null' }, { type: 'number' }],
+            },
+          },
+          required: ['type', 'concept', 'sourcePage', 'question', 'answer', 'hint', 'source', 'options', 'correctOptionIndex'],
+        },
+      },
+    },
+    required: ['reviewQuestions'],
+  } as const;
+
+  const prompt = `
 너는 시험 대비용 퀴즈만 만드는 한국어 출제 AI다.
-반드시 PDF 본문과 페이지 개요를 실제로 분석한 뒤, 중요한 내용만 골라 짧고 명확한 퀴즈를 만들어라.
+반드시 실제 PDF 본문을 읽고, 페이지별 근거를 먼저 분석한 뒤 그 내용과 직접 연결된 문제만 만들어라.
+
+이번 작업 목표:
+- 먼저 이 PDF가 무엇을 설명하는 자료인지 파악한다.
+- 그 뒤 시험에 나올 가능성이 높은 개념, 정의, 원리, 과정, 비교 포인트만 골라 문제를 만든다.
+- 절대로 일반론, 상식형 문제, 자료와 무관한 추측 문제를 만들지 않는다.
 
 반드시 지켜라:
 1) 출력은 JSON만.
-2) reviewQuestions는 ${LOW_TOKEN_MODE ? '4개' : '4~5개'}만 만든다.
-3) reviewQuestions의 type은 short/ox/mcq만 사용하고 세 유형이 고르게 섞이게 한다.
-4) short의 answer는 1~2문장 핵심답, ox의 answer는 반드시 O 또는 X, mcq는 options 4개와 correctOptionIndex 0~3을 반드시 포함한다.
-5) 모든 question/answer/hint/options/source는 반드시 한국어로 작성한다.
-6) 각 문제의 source는 PDF 본문 또는 페이지 개요에서 실제로 확인되는 짧은 근거 문구여야 한다.
-7) PDF에서 중요도가 낮은 주변 설명은 문제화하지 말고, 정의/원리/과정/비교/결론처럼 시험에 바로 나올 핵심만 고른다.
-8) source와 무관한 일반론/상식형 문제는 금지한다.
-9) 페이지 개요가 보여주는 실제 페이지 번호 흐름을 존중하고, 가능한 한 서로 다른 핵심 포인트를 문제로 만든다.
-10) hint는 한 줄 힌트로 작성하고 정답을 그대로 반복하지 마라.
-11) 과목이 수학/통계/공학 계열이더라도 수식이나 URL 자체를 그대로 외우게 하기보다, 그 의미나 역할을 묻는 문제를 우선한다.
+2) reviewQuestions는 4~5개만 만든다.
+3) type은 short/ox/mcq만 사용하고 세 유형이 섞이게 한다.
+4) question/answer/hint/source/options/concept는 모두 자연스러운 한국어로 작성한다.
+5) question은 반드시 구체적인 개념명을 포함해야 하며, "다음 자료", "자료 문장", "PDF 본문" 같은 일반 표현만으로 묻지 마라.
+6) sourcePage는 실제 근거 페이지 번호를 넣어라.
+7) source는 아래 "페이지별 직접 근거" 중 하나를 바탕으로 만든 짧은 근거 문구여야 한다.
+8) short는 1~2문장 핵심답, ox는 answer를 O 또는 X, mcq는 보기 4개와 correctOptionIndex 0~3을 반드시 포함한다.
+9) 수식, URL, 기호를 그대로 암기시키기보다 의미/역할/해석을 묻는 문제를 우선한다.
+10) PDF에서 확인되지 않는 내용은 절대 추가하지 마라.
 
 입력:
 - 과목: ${payload.subject ?? '미지정'}
 - 강의 제목: ${payload.lectureTitle}
-- PDF 본문: ${compactedPdf}
+- PDF 압축 본문:
+${compactedPdf}
+
 - 페이지 개요:
 ${compactedPageOutline || '- 페이지 개요 없음'}
 
-JSON 스키마 설명:
-reviewQuestions: [{type:'short'|'ox'|'mcq', question:string, answer:string, hint?:string, source:string, options?:string[], correctOptionIndex?:number}]
-`,
-      schema: {
-        type: 'object',
-        properties: {
-          reviewQuestions: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                type: { type: 'string', enum: ['short', 'ox', 'mcq'] },
-                question: { type: 'string' },
-                answer: { type: 'string' },
-                hint: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-                source: { type: 'string' },
-                options: {
-                  anyOf: [
-                    { type: 'null' },
-                    { type: 'array', items: { type: 'string' } },
-                  ],
-                },
-                correctOptionIndex: {
-                  anyOf: [{ type: 'null' }, { type: 'number' }],
-                },
-              },
-              required: ['type', 'question', 'answer', 'hint', 'source', 'options', 'correctOptionIndex'],
-            },
-          },
-        },
-        required: ['reviewQuestions'],
-      },
+- 페이지별 직접 근거:
+${quizEvidence.evidenceText || '- 근거 없음'}
+`;
+
+  try {
+    const initial = await generateGeminiJson<{ reviewQuestions: GroundedQuizQuestion[] }>({
+      model: GEMINI_MODELS.reasoning,
+      prompt,
+      schema,
     });
+
+    const initialValidation = validateGroundedQuizQuestions(initial.reviewQuestions, quizEvidence.evidenceSources);
+    if (!initialValidation.problems.length) {
+      return { reviewQuestions: initialValidation.normalized };
+    }
+
+    const repaired = await generateGeminiJson<{ reviewQuestions: GroundedQuizQuestion[] }>({
+      model: GEMINI_MODELS.reasoning,
+      prompt: `${prompt}
+
+이전 시도에서 아래 문제가 있었다:
+- ${initialValidation.problems.join('\n- ')}
+
+이전 JSON:
+${JSON.stringify(initial)}
+
+이번에는 반드시 위 문제를 모두 고쳐서 다시 생성하라.
+특히 source는 페이지별 직접 근거와 일치해야 하고, 질문 문장에는 실제 개념명이 들어가야 한다.
+`,
+      schema,
+    });
+
+    const repairedValidation = validateGroundedQuizQuestions(repaired.reviewQuestions, quizEvidence.evidenceSources);
+    if (!repairedValidation.problems.length) {
+      return { reviewQuestions: repairedValidation.normalized };
+    }
+
+    throw new Error('AI가 PDF 근거 기반 퀴즈를 안정적으로 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.');
   } catch (error) {
     throw new Error(toUserFacingGeminiError(error));
   }

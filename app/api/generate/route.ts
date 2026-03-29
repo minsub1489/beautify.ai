@@ -9,7 +9,7 @@ import { getCurrentUserId } from '@/lib/auth-user';
 import { ensureBillingBootstrap } from '@/lib/billing/bootstrap';
 import { beginAiUsage, failAiUsage, finalizeAiUsage } from '@/lib/billing/usage';
 import { assertWithinRateLimit } from '@/lib/rate-limit';
-import { generateLocalNotesPack, generateLocalQuizPack } from '@/lib/local-study';
+import { generateLocalNotesPack } from '@/lib/local-study';
 
 export const maxDuration = 60;
 const LOW_TOKEN_MODE = (process.env.AI_LOW_TOKEN_MODE || '').toLowerCase() === 'true';
@@ -307,10 +307,15 @@ export async function POST(req: Request) {
       .filter(Boolean)
       .join('\n');
 
+    const effectiveFeature = mode === 'quiz' ? 'pdf_quiz_generation' : 'annotated_notes_generation';
+    const effectiveModel = mode === 'quiz'
+      ? (process.env.GEMINI_REASONING_MODEL || process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash')
+      : (process.env.GEMINI_REASONING_MODEL || process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash-lite');
+
     const usageGuard = await beginAiUsage({
       userId,
-      feature: 'annotated_notes_generation',
-      model: process.env.GEMINI_REASONING_MODEL || process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash-lite',
+      feature: effectiveFeature,
+      model: effectiveModel,
       inputText: [
         mode,
         `${requestedRange.start}-${requestedRange.end}`,
@@ -409,34 +414,19 @@ export async function POST(req: Request) {
         },
       });
     } else {
-      let result;
-      if (LOCAL_PIPELINE_MODE) {
-        result = generateLocalQuizPack({
-          lectureTitle: projectForGeneration.title,
-          pdfText: selectedPdfText || latestPdf.extractedText || '',
-          pdfPageTexts: selectedPdfPages.map((page) => page.text),
-        });
-      } else {
-        try {
-          result = await generatePdfReviewQuestions({
-            subject: projectForGeneration.subject ?? '미지정',
-            lectureTitle: projectForGeneration.title,
-            pdfText: selectedPdfText || latestPdf.extractedText || '',
-            pdfPages: selectedPdfPages,
-          });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : '';
-          if (/quota|rate limit|429|insufficient_quota|RESOURCE_EXHAUSTED/i.test(message)) {
-            result = generateLocalQuizPack({
-              lectureTitle: projectForGeneration.title,
-              pdfText: selectedPdfText || latestPdf.extractedText || '',
-              pdfPageTexts: selectedPdfPages.map((page) => page.text),
-            });
-          } else {
-            throw error;
-          }
-        }
+      const quizSourceText = (selectedPdfText || latestPdf.extractedText || '').trim();
+      if (!quizSourceText) {
+        return NextResponse.json(
+          { error: '선택한 PDF 페이지에서 텍스트를 읽지 못했습니다. 텍스트가 포함된 PDF인지 확인한 뒤 다시 시도해 주세요.' },
+          { status: 400 },
+        );
       }
+      const result = await generatePdfReviewQuestions({
+        subject: projectForGeneration.subject ?? '미지정',
+        lectureTitle: projectForGeneration.title,
+        pdfText: quizSourceText,
+        pdfPages: selectedPdfPages,
+      });
 
       await prisma.generationRun.create({
         data: {
