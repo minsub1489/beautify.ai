@@ -1,3 +1,5 @@
+@import "pdfjs-dist/web/pdf_viewer.css";
+
 :root {
   --bg: #fff7fb;
   --card: rgba(255, 255, 255, 0.74);
@@ -279,6 +281,229 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 .previewHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .previewFrameWrap { border: 1px solid rgba(255,255,255,0.66); border-radius: 18px; overflow: hidden; min-height: 540px; background: rgba(255,255,255,0.88); box-shadow: inset 0 0 0 1px rgba(130, 103, 255, 0.08); }
 .previewFrame { width: 100%; height: 72vh; min-height: 540px; border: 0; }
+.pdfViewerShell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 540px;
+  height: 72vh;
+  background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(255,249,252,0.94) 100%);
+}
+.pdfViewerToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(236,72,153,0.12);
+  background: rgba(255,255,255,0.94);
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  backdrop-filter: blur(16px);
+}
+.pdfViewerToolbarGroup { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pdfViewerPill,
+.pdfViewerStatusPill,
+.pdfViewerMenuButton {
+  min-height: 38px;
+  border-radius: 12px;
+  border: 1px solid rgba(236,72,153,0.14);
+  background: rgba(255,255,255,0.94);
+  color: #7a284f;
+  padding: 0 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.pdfViewerPill,
+.pdfViewerMenuButton { cursor: pointer; }
+.pdfViewerMenuButton.active {
+  border-color: rgba(236,72,153,0.3);
+  box-shadow: 0 10px 18px rgba(236,72,153,0.12);
+}
+.pdfViewerPageField {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border-radius: 12px;
+  border: 1px solid rgba(236,72,153,0.14);
+  background: rgba(255,255,255,0.94);
+  padding: 0 12px;
+  color: #7a284f;
+  font-weight: 700;
+}
+.pdfViewerPageInput {
+  width: 56px;
+  border: none;
+  background: transparent;
+  color: #7a284f;
+  font-weight: 800;
+  text-align: center;
+  outline: none;
+}
+.pdfViewerToolbarMenuWrap { position: relative; }
+.pdfViewerMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  max-height: min(72vh, 720px);
+  overflow: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(236,72,153,0.18);
+  background: rgba(255,255,255,0.98);
+  box-shadow: 0 28px 50px rgba(17,24,39,0.2);
+  padding: 10px;
+  z-index: 20;
+}
+.pdfViewerMenuGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+}
+.pdfViewerMenuGroup + .pdfViewerMenuGroup {
+  border-top: 1px solid rgba(236,72,153,0.12);
+}
+.pdfViewerMenuLabel {
+  padding: 6px 10px 2px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #9d174d;
+}
+.pdfViewerMenuItem {
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #2b2338;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+.pdfViewerMenuItem:hover,
+.pdfViewerMenuItem.selected {
+  background: linear-gradient(135deg, rgba(255,238,246,0.98) 0%, rgba(255,247,251,0.98) 100%);
+  color: #9d174d;
+}
+.pdfViewerViewport {
+  position: relative;
+  flex: 1 1 auto;
+  overflow: auto;
+  background:
+    radial-gradient(circle at top, rgba(255,255,255,0.98), rgba(250,240,246,0.92)),
+    #fff;
+  padding: 18px 0;
+}
+.pdfViewerViewport.handMode,
+.pdfViewerViewport.handMode * {
+  cursor: grab !important;
+  user-select: none !important;
+}
+.pdfViewerViewport.handMode:active,
+.pdfViewerViewport.handMode:active * {
+  cursor: grabbing !important;
+}
+.pdfViewerViewport .pdfViewer {
+  padding-bottom: 28px;
+}
+.pdfViewerViewport .pdfViewer .page {
+  border-radius: 16px;
+  box-shadow: 0 20px 36px rgba(17,24,39,0.14);
+  border: 1px solid rgba(236,72,153,0.08);
+  overflow: hidden;
+}
+.pdfViewerOverlay {
+  position: absolute;
+  inset: 16px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #7a284f;
+  font-weight: 800;
+  z-index: 5;
+}
+.pdfViewerOverlay.error {
+  background: rgba(254,242,242,0.96);
+  color: #b91c1c;
+}
+.pdfViewerFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(236,72,153,0.12);
+  background: rgba(255,255,255,0.94);
+  color: #7a4f67;
+  font-size: 13px;
+  font-weight: 700;
+}
+.pdfViewerPropertiesBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15,23,42,0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 30;
+}
+.pdfViewerPropertiesCard {
+  width: min(640px, 100%);
+  border-radius: 24px;
+  background: rgba(255,255,255,0.98);
+  border: 1px solid rgba(236,72,153,0.16);
+  box-shadow: 0 30px 60px rgba(17,24,39,0.24);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pdfViewerPropertiesHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pdfViewerPropertiesGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.pdfViewerPropertyItem {
+  border-radius: 16px;
+  border: 1px solid rgba(236,72,153,0.12);
+  background: linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(255,244,249,0.96) 100%);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pdfViewerPropertyItem span {
+  font-size: 12px;
+  font-weight: 800;
+  color: #9d174d;
+}
+.pdfViewerPropertyItem strong {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1f2937;
+  word-break: break-word;
+}
+.pdfViewerShell.fullscreen {
+  height: 100vh;
+  min-height: 100vh;
+}
 .previewEditWrap {
   border: 1px solid rgba(236,72,153,0.14);
   border-radius: 18px;

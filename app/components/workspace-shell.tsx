@@ -6,6 +6,7 @@ import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Download, Languages, Moon, Paperclip, Pencil, Plus, Sun, Trash2, UploadCloud, X } from 'lucide-react';
 import { AuthControls } from './auth-controls';
+import { PdfPreviewViewer } from './pdf-preview-viewer';
 
 type ProjectItem = {
   id: string;
@@ -2043,7 +2044,7 @@ export function WorkspaceShell({
                 </div>
               ) : (
                 <div className="previewFrameWrap">
-                  <iframe className="previewFrame" src={previewPdfUrl} title="PDF 미리보기" />
+                  <PdfPreviewViewer src={previewPdfUrl} fileName={previewDownloadName} />
                 </div>
               )
             ) : (
