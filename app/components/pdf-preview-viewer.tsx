@@ -171,14 +171,12 @@ export function PdfPreviewViewer({ src, fileName }: PdfPreviewViewerProps) {
 
     async function boot() {
       try {
-        const [pdfjsLib, pdfjsViewer] = await Promise.all([
-          import('pdfjs-dist/build/pdf.mjs'),
-          import('pdfjs-dist/web/pdf_viewer.mjs'),
-        ]);
+        const pdfjsLib = await import('pdfjs-dist/build/pdf.mjs');
+        (globalThis as { pdfjsLib?: typeof pdfjsLib }).pdfjsLib = pdfjsLib;
+        const pdfjsViewer = await import('pdfjs-dist/web/pdf_viewer.mjs');
 
         if (cancelled || !containerRef.current || !viewerRef.current) return;
 
-        (globalThis as { pdfjsLib?: typeof pdfjsLib }).pdfjsLib = pdfjsLib;
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/build/pdf.worker.mjs';
 
         const eventBus = new pdfjsViewer.EventBus();
