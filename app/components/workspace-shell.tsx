@@ -72,9 +72,11 @@ type WrongAnswerNote = {
   userAnswer: string;
   correctAnswer: string;
   hint?: string;
+  source?: string;
 };
 
 type QuizAnswerStatus = 'unanswered' | 'correct' | 'wrong';
+type QuizStage = 'home' | 'study' | 'results';
 
 function sanitizeText(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
@@ -207,6 +209,18 @@ function getQuizAnswerStatus(item: QuizItem | undefined, userAnswer: string) {
   return isQuizAnswerCorrect(item, userAnswer) ? 'correct' as const : 'wrong' as const;
 }
 
+function formatDateLabel(value?: string | null) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return new Intl.DateTimeFormat('ko-KR', {
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(parsed);
+}
+
 function createPageEditorItem(sourcePage: number): PageEditorItem {
   return {
     id: globalThis.crypto?.randomUUID?.() ?? `${sourcePage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
@@ -304,6 +318,7 @@ export function WorkspaceShell({
   const [retryQuizMode, setRetryQuizMode] = useState(false);
   const [retryQuizItems, setRetryQuizItems] = useState<QuizItem[]>([]);
   const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
+  const [quizStage, setQuizStage] = useState<QuizStage>('home');
   const [quizAutoGenerating, setQuizAutoGenerating] = useState(false);
   const [quizAutoStatus, setQuizAutoStatus] = useState('');
   const [pdfEditMode, setPdfEditMode] = useState(false);
@@ -345,6 +360,27 @@ export function WorkspaceShell({
   const currentQuizStatus = getQuizAnswerStatus(currentQuizItem, currentQuizAnswer);
   const answeredCount = activeQuizItems.filter((_, idx) => (quizAnswers[idx] || '').trim()).length;
   const remainingCount = Math.max(0, activeQuizItems.length - answeredCount);
+  const totalQuizCount = activeQuizItems.length;
+  const wrongCount = wrongNotes.length;
+  const correctCount = Math.max(0, totalQuizCount - wrongCount);
+  const quizAccuracy = totalQuizCount ? Math.round((correctCount / totalQuizCount) * 100) : 0;
+  const quizLastGeneratedLabel = formatDateLabel(selectedProject?.lastRun?.createdAt);
+  const quizTypeCounts = useMemo(() => {
+    return activeQuizItems.reduce(
+      (acc, item) => {
+        acc[item.type] += 1;
+        return acc;
+      },
+      { short: 0, ox: 0, mcq: 0 } as Record<QuizItem['type'], number>,
+    );
+  }, [activeQuizItems]);
+  const weakStudyPoints = useMemo(() => {
+    if (!wrongNotes.length) return [];
+    return wrongNotes
+      .map((note) => note.source || note.hint || note.question)
+      .filter(Boolean)
+      .slice(0, 4);
+  }, [wrongNotes]);
   const currentPdfPageCount = pdfPageItems.length;
   const pdfPageDirty = useMemo(
     () => getPageOrderSignature(pdfPageItems) !== pdfPageInitialOrder.join(','),
@@ -553,6 +589,7 @@ export function WorkspaceShell({
     setRetryQuizMode(false);
     setRetryQuizItems([]);
     setCurrentQuizIndex(0);
+    setQuizStage('home');
     setQuizAutoGenerating(false);
     setQuizAutoStatus('');
   }, [selectedProject?.id, selectedProject?.lastRun?.questionsJson]);
@@ -582,6 +619,65 @@ export function WorkspaceShell({
       setCurrentQuizIndex(activeQuizItems.length - 1);
     }
   }, [activeQuizItems.length, currentQuizIndex]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !selectedProject?.id || !activeQuizItems.length) return;
+
+    const key = `beautify:quiz-intent:${selectedProject.id}`;
+    const nextStage = window.sessionStorage.getItem(key);
+    if (!nextStage) return;
+
+    setWorkspaceView('quiz');
+    setQuizStage(nextStage === 'results' ? 'results' : 'study');
+    window.sessionStorage.removeItem(key);
+  }, [activeQuizItems.length, selectedProject?.id]);
+
+  useEffect(() => {
+    if (workspaceView !== 'quiz' || quizStage !== 'study' || !currentQuizItem || quizSubmitted) return;
+
+    function handleQuizKeydown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase() || '';
+      const isTypingField = tag === 'textarea' || (tag === 'input' && !(target as HTMLInputElement).readOnly);
+
+      if (currentQuizItem.type === 'mcq' && /^[1-4]$/.test(event.key) && !isTypingField) {
+        const option = currentQuizItem.options?.[Number(event.key) - 1];
+        if (option) {
+          event.preventDefault();
+          setQuizAnswer(currentQuizIndex, option);
+        }
+        return;
+      }
+
+      if (currentQuizItem.type === 'ox' && /^(o|x)$/i.test(event.key) && !isTypingField) {
+        event.preventDefault();
+        setQuizAnswer(currentQuizIndex, event.key.toUpperCase());
+        return;
+      }
+
+      if (event.key === 'Enter' && currentQuizAnswer.trim()) {
+        event.preventDefault();
+        goToNextQuiz();
+        return;
+      }
+
+      if (event.key === 'ArrowRight' && currentQuizAnswer.trim() && !isTypingField) {
+        event.preventDefault();
+        goToNextQuiz();
+        return;
+      }
+
+      if (event.key === 'ArrowLeft' && !isTypingField) {
+        event.preventDefault();
+        goToPreviousQuiz();
+      }
+    }
+
+    window.addEventListener('keydown', handleQuizKeydown);
+    return () => {
+      window.removeEventListener('keydown', handleQuizKeydown);
+    };
+  }, [currentQuizAnswer, currentQuizIndex, currentQuizItem, quizStage, quizSubmitted, workspaceView]);
 
   useEffect(() => {
     let active = true;
@@ -1299,6 +1395,18 @@ export function WorkspaceShell({
     setQuizAnswers((prev) => ({ ...prev, [index]: value }));
   }
 
+  function startQuizStudy() {
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    setWrongNotes([]);
+    setCurrentQuizIndex(0);
+    setQuizStage('study');
+  }
+
+  function goToQuizHome() {
+    setQuizStage('home');
+  }
+
   function finishQuiz() {
     const wrong: WrongAnswerNote[] = [];
     activeQuizItems.forEach((item, idx) => {
@@ -1314,11 +1422,13 @@ export function WorkspaceShell({
             ? item.options[item.correctOptionIndex]
             : item.answer,
         hint: item.hint,
+        source: item.source,
       });
     });
 
     setWrongNotes(wrong);
     setQuizSubmitted(true);
+    setQuizStage('results');
   }
 
   function goToNextQuiz() {
@@ -1342,7 +1452,9 @@ export function WorkspaceShell({
     setRetryQuizMode(true);
     setQuizSubmitted(false);
     setQuizAnswers({});
+    setWrongNotes([]);
     setCurrentQuizIndex(0);
+    setQuizStage('study');
   }
 
   function resetFullQuiz() {
@@ -1350,7 +1462,9 @@ export function WorkspaceShell({
     setRetryQuizItems([]);
     setQuizSubmitted(false);
     setQuizAnswers({});
+    setWrongNotes([]);
     setCurrentQuizIndex(0);
+    setQuizStage('study');
   }
 
   async function autoGenerateQuiz() {
@@ -1382,6 +1496,9 @@ export function WorkspaceShell({
       });
 
       if (response.redirected) {
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem(`beautify:quiz-intent:${selectedProject.id}`, 'study');
+        }
         window.location.assign(response.url);
         return;
       }
@@ -1402,6 +1519,8 @@ export function WorkspaceShell({
       }
 
       setQuizAutoStatus(`PDF ${normalizedRange.start}~${normalizedRange.end}페이지 기준 퀴즈가 준비되었습니다.`);
+      setWorkspaceView('quiz');
+      setQuizStage('study');
       router.refresh();
     } catch {
       setQuizAutoStatus('퀴즈 자동 생성 중 네트워크 오류가 발생했습니다.');
@@ -2079,216 +2198,356 @@ export function WorkspaceShell({
               </>
             ) : (
               <div className="quizTabPanel">
+                <div className="quizStageRail" aria-label="퀴즈 학습 단계">
+                  {[
+                    { id: 'home', label: '학습 홈' },
+                    { id: 'study', label: '학습 진행' },
+                    { id: 'results', label: '결과 확인' },
+                  ].map((step) => {
+                    const isActive = quizStage === step.id;
+                    const isDone =
+                      (step.id === 'home' && (quizStage === 'study' || quizStage === 'results')) ||
+                      (step.id === 'study' && quizStage === 'results');
+
+                    return (
+                      <div key={step.id} className={`quizStageStep ${isActive ? 'active' : ''} ${isDone ? 'done' : ''}`}>
+                        <div className="quizStageStepDot" aria-hidden="true" />
+                        <div className="quizStageStepLabel">{step.label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
                 <div className="quizAutoInline">
-                  {retryQuizMode ? <div className="badge">오답 재시험</div> : <div className="muted">범위를 정한 뒤 PDF를 실제로 분석해서 한국어 퀴즈를 만듭니다.</div>}
+                  {retryQuizMode ? <div className="badge">오답 변형 복습 모드</div> : <div className="muted">PDF를 분석해 퀴즈 덱을 만들고, 학습과 결과 확인을 분리해서 진행합니다.</div>}
                   {quizAutoStatus ? <div className="muted">상태: {quizAutoStatus}</div> : null}
                 </div>
-                <div className="generationRangeCard quizRangeCard">
-                  <div className="generationRangeHeader">
-                    <div>
-                      <div className="sectionTitle">퀴즈 출제 범위</div>
-                      <div className="muted">
-                        현재 PDF의 {normalizedQuizRange.start}페이지부터 {normalizedQuizRange.end}페이지까지 분석해서 중요한 부분만 문제로 냅니다.
-                      </div>
-                    </div>
-                    <div className="generationRangeBadge">총 {currentPdfPageCount || 0}페이지</div>
-                  </div>
-                  <div className="generationRangeInputs">
-                    <label className="generationRangeField">
-                      <span>시작 페이지</span>
-                      <input
-                        className="input generationRangeInput"
-                        type="number"
-                        min={1}
-                        max={currentPdfPageCount || 1}
-                        inputMode="numeric"
-                        value={quizRangeStart}
-                        onChange={(event) => setQuizRangeStart(sanitizePageRangeInput(event.target.value))}
-                        onBlur={applyQuizRangeNormalization}
-                        disabled={!hasPdfAsset || quizAutoGenerating}
-                      />
-                    </label>
-                    <label className="generationRangeField">
-                      <span>끝 페이지</span>
-                      <input
-                        className="input generationRangeInput"
-                        type="number"
-                        min={1}
-                        max={currentPdfPageCount || 1}
-                        inputMode="numeric"
-                        value={quizRangeEnd}
-                        onChange={(event) => setQuizRangeEnd(sanitizePageRangeInput(event.target.value))}
-                        onBlur={applyQuizRangeNormalization}
-                        disabled={!hasPdfAsset || quizAutoGenerating}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="button secondary generationRangeReset"
-                      onClick={() => {
-                        const fullEnd = String(currentPdfPageCount || 1);
-                        setQuizRangeStart('1');
-                        setQuizRangeEnd(fullEnd);
-                      }}
-                      disabled={!hasPdfAsset || quizAutoGenerating}
-                    >
-                      전체 범위
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    className="button generateButton"
-                    disabled={quizAutoGenerating || !selectedProject?.id || !hasPdfAsset}
-                    onClick={() => {
-                      void autoGenerateQuiz();
-                    }}
-                  >
-                    {quizAutoGenerating ? '퀴즈 생성 중...' : activeQuizItems.length ? '퀴즈 다시 생성' : '퀴즈 생성'}
-                  </button>
-                </div>
 
-                {activeQuizItems.length ? (
-                  <div className="quizSingleWrap">
-                    <div className="quizProgressCard">
-                      <div className="quizProgressTop">
-                        <div className="quizProgressCount">문제 {currentQuizIndex + 1} / {activeQuizItems.length}</div>
-                        <div className="quizProgressRemaining">남은 문제 {remainingCount}</div>
-                      </div>
-                      <div className="quizProgressBar">
-                        <div
-                          className="quizProgressFill"
-                          style={{ width: `${activeQuizItems.length ? ((currentQuizIndex + 1) / activeQuizItems.length) * 100 : 0}%` }}
-                        />
-                      </div>
-                      <div className="quizProgressMeta">
-                        입력한 문제 {answeredCount}개
-                      </div>
-                    </div>
-
-                    {currentQuizItem ? (
-                      <div className="quizItem">
-                        <div className="quizQ">Q{currentQuizIndex + 1}. {currentQuizItem.question}</div>
-                        <div className="quizMeta">
-                          유형: {currentQuizItem.type === 'mcq' ? '4지선다' : currentQuizItem.type === 'ox' ? 'OX' : '단답형'}
-                        </div>
-                        {currentQuizItem.source ? <div className="quizMeta">출제 근거: {currentQuizItem.source}</div> : null}
-                        <div className="quizHint">힌트: {currentQuizItem.hint || 'PDF에서 해당 개념이 어떤 맥락으로 설명되는지 다시 떠올려 보세요.'}</div>
-
-                        <div className={`quizLiveStatus ${currentQuizStatus}`}>
-                          {currentQuizStatus === 'correct'
-                            ? '정답입니다'
-                            : currentQuizStatus === 'wrong'
-                              ? '오답입니다'
-                              : '답을 입력하거나 선택해 보세요'}
-                        </div>
-
-                        {currentQuizItem.type === 'mcq' && currentQuizItem.options?.length ? (
-                          <div className="quizChoiceList">
-                            {currentQuizItem.options.map((option, optionIndex) => {
-                              const selected = currentQuizAnswer === option;
-                              return (
-                                <button
-                                  key={`${currentQuizItem.question}-${optionIndex}`}
-                                  type="button"
-                                  className={`quizChoice ${selected ? 'selected' : ''} ${selected && currentQuizStatus !== 'unanswered' ? currentQuizStatus : ''}`}
-                                  onClick={() => setQuizAnswer(currentQuizIndex, option)}
-                                  disabled={quizSubmitted}
-                                >
-                                  {optionIndex + 1}. {option}
-                                </button>
-                              );
-                            })}
+                {quizStage === 'home' ? (
+                  <>
+                    <div className="generationRangeCard quizRangeCard">
+                      <div className="generationRangeHeader">
+                        <div>
+                          <div className="sectionTitle">퀴즈 출제 범위</div>
+                          <div className="muted">
+                            현재 PDF의 {normalizedQuizRange.start}페이지부터 {normalizedQuizRange.end}페이지까지 분석해서 중요한 부분만 문제로 냅니다.
                           </div>
-                        ) : currentQuizItem.type === 'ox' ? (
-                          <div className="quizChoiceList row">
-                            {['O', 'X'].map((option) => {
-                              const selected = currentQuizAnswer === option;
-                              return (
-                                <button
-                                  key={`${currentQuizItem.question}-${option}`}
-                                  type="button"
-                                  className={`quizChoice ${selected ? 'selected' : ''} ${selected && currentQuizStatus !== 'unanswered' ? currentQuizStatus : ''}`}
-                                  onClick={() => setQuizAnswer(currentQuizIndex, option)}
-                                  disabled={quizSubmitted}
-                                >
-                                  {option}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : (
+                        </div>
+                        <div className="generationRangeBadge">총 {currentPdfPageCount || 0}페이지</div>
+                      </div>
+                      <div className="generationRangeInputs">
+                        <label className="generationRangeField">
+                          <span>시작 페이지</span>
                           <input
-                            className={`input quizInput ${currentQuizStatus !== 'unanswered' ? `quizInput-${currentQuizStatus}` : ''}`}
-                            value={currentQuizAnswer}
-                            onChange={(event) => setQuizAnswer(currentQuizIndex, event.target.value)}
-                            disabled={quizSubmitted}
-                            placeholder="정답을 짧게 입력하세요"
+                            className="input generationRangeInput"
+                            type="number"
+                            min={1}
+                            max={currentPdfPageCount || 1}
+                            inputMode="numeric"
+                            value={quizRangeStart}
+                            onChange={(event) => setQuizRangeStart(sanitizePageRangeInput(event.target.value))}
+                            onBlur={applyQuizRangeNormalization}
+                            disabled={!hasPdfAsset || quizAutoGenerating}
                           />
-                        )}
+                        </label>
+                        <label className="generationRangeField">
+                          <span>끝 페이지</span>
+                          <input
+                            className="input generationRangeInput"
+                            type="number"
+                            min={1}
+                            max={currentPdfPageCount || 1}
+                            inputMode="numeric"
+                            value={quizRangeEnd}
+                            onChange={(event) => setQuizRangeEnd(sanitizePageRangeInput(event.target.value))}
+                            onBlur={applyQuizRangeNormalization}
+                            disabled={!hasPdfAsset || quizAutoGenerating}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="button secondary generationRangeReset"
+                          onClick={() => {
+                            const fullEnd = String(currentPdfPageCount || 1);
+                            setQuizRangeStart('1');
+                            setQuizRangeEnd(fullEnd);
+                          }}
+                          disabled={!hasPdfAsset || quizAutoGenerating}
+                        >
+                          전체 범위
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        className="button generateButton"
+                        disabled={quizAutoGenerating || !selectedProject?.id || !hasPdfAsset}
+                        onClick={() => {
+                          void autoGenerateQuiz();
+                        }}
+                      >
+                        {quizAutoGenerating ? '퀴즈 생성 중...' : activeQuizItems.length ? '퀴즈 다시 생성' : '퀴즈 생성'}
+                      </button>
+                    </div>
 
-                        {quizSubmitted ? (
-                          <div className="quizA">
-                            정답: {currentQuizItem.type === 'mcq' && typeof currentQuizItem.correctOptionIndex === 'number' && currentQuizItem.options?.[currentQuizItem.correctOptionIndex]
-                              ? currentQuizItem.options[currentQuizItem.correctOptionIndex]
-                              : currentQuizItem.answer}
+                    {activeQuizItems.length ? (
+                      <div className="quizHomeCard">
+                        <div className="quizHomeHeader">
+                          <div>
+                            <div className="sectionTitle">{retryQuizMode ? '오답 변형 퀴즈가 준비되었습니다' : '학습용 퀴즈가 준비되었습니다'}</div>
+                            <div className="muted">
+                              {retryQuizMode
+                                ? '이전 시도에서 어려웠던 개념만 다시 변형 문제로 복습할 수 있습니다.'
+                                : '문제를 바로 풀기보다 학습 덱을 먼저 확인하고 시작하는 구조로 바뀌었습니다.'}
+                            </div>
+                          </div>
+                          <div className="generationRangeBadge">총 {activeQuizItems.length}문항</div>
+                        </div>
+
+                        <div className="quizHomeStats">
+                          <div className="quizHomeStatCard primary">
+                            <div className="quizHomeStatLabel">단답형</div>
+                            <div className="quizHomeStatValue">{quizTypeCounts.short}</div>
+                          </div>
+                          <div className="quizHomeStatCard">
+                            <div className="quizHomeStatLabel">OX</div>
+                            <div className="quizHomeStatValue">{quizTypeCounts.ox}</div>
+                          </div>
+                          <div className="quizHomeStatCard">
+                            <div className="quizHomeStatLabel">4지선다</div>
+                            <div className="quizHomeStatValue">{quizTypeCounts.mcq}</div>
+                          </div>
+                        </div>
+
+                        <div className="quizFlowCard">
+                          <div className="quizFlowTitle">학습 흐름</div>
+                          <div className="quizFlowList">
+                            <div className="quizFlowItem">1. 범위를 정하고 PDF 기반 퀴즈 생성</div>
+                            <div className="quizFlowItem">2. 한 문제씩 풀이하면서 바로 확인</div>
+                            <div className="quizFlowItem">3. 결과 화면에서 약점 개념 확인</div>
+                            <div className="quizFlowItem">4. 오답은 변형 문제로 다시 복습</div>
+                          </div>
+                        </div>
+
+                        <div className="quizHomeMetaRow">
+                          {quizLastGeneratedLabel ? <div className="quizHomeMetaChip">최근 생성: {quizLastGeneratedLabel}</div> : null}
+                          <div className="quizHomeMetaChip">범위: {normalizedQuizRange.start}~{normalizedQuizRange.end}페이지</div>
+                        </div>
+
+                        <div className="quizActions">
+                          <button className="button" type="button" onClick={startQuizStudy}>
+                            {retryQuizMode ? '오답 복습 시작' : '학습 시작'}
+                          </button>
+                          {retryQuizMode ? (
+                            <button className="button secondary" type="button" onClick={resetFullQuiz}>
+                              전체 퀴즈로 돌아가기
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="dropZone">
+                        <div className="dropZoneTitle">퀴즈 덱이 아직 없습니다</div>
+                        <div className="muted">PDF를 실제로 분석해서 중요한 정의, 원리, 비교 포인트만 한국어 문제로 생성합니다.</div>
+                      </div>
+                    )}
+                  </>
+                ) : quizStage === 'study' ? (
+                  activeQuizItems.length ? (
+                    <>
+                      <div className="quizSingleWrap">
+                        <div className="quizStudyAssist">
+                          <div className="quizStudyAssistTitle">학습 진행 중</div>
+                          <div className="quizStudyAssistText">
+                            {currentQuizItem?.type === 'mcq'
+                              ? '숫자 1~4로 보기를 고를 수 있고, Enter 또는 →로 다음 문제로 넘어갑니다.'
+                              : currentQuizItem?.type === 'ox'
+                                ? 'O / X 키로 답할 수 있고, Enter 또는 →로 다음 문제로 넘어갑니다.'
+                                : '단답형은 직접 입력하고 Enter 또는 →로 다음 문제로 넘어갑니다.'}
+                          </div>
+                        </div>
+
+                        <div className="quizProgressCard">
+                          <div className="quizProgressTop">
+                            <div className="quizProgressCount">문제 {currentQuizIndex + 1} / {activeQuizItems.length}</div>
+                            <div className="quizProgressRemaining">남은 문제 {remainingCount}</div>
+                          </div>
+                          <div className="quizProgressBar">
+                            <div
+                              className="quizProgressFill"
+                              style={{ width: `${activeQuizItems.length ? ((currentQuizIndex + 1) / activeQuizItems.length) * 100 : 0}%` }}
+                            />
+                          </div>
+                          <div className="quizProgressMeta">
+                            입력한 문제 {answeredCount}개
+                          </div>
+                        </div>
+
+                        {currentQuizItem ? (
+                          <div className="quizItem">
+                            <div className="quizQ">Q{currentQuizIndex + 1}. {currentQuizItem.question}</div>
+                            <div className="quizMeta">
+                              유형: {currentQuizItem.type === 'mcq' ? '4지선다' : currentQuizItem.type === 'ox' ? 'OX' : '단답형'}
+                            </div>
+                            {currentQuizItem.source ? <div className="quizMeta">출제 근거: {currentQuizItem.source}</div> : null}
+                            <div className="quizHint">힌트: {currentQuizItem.hint || 'PDF에서 해당 개념이 어떤 맥락으로 설명되는지 다시 떠올려 보세요.'}</div>
+
+                            <div className={`quizLiveStatus ${currentQuizStatus}`}>
+                              {currentQuizStatus === 'correct'
+                                ? '정답입니다'
+                                : currentQuizStatus === 'wrong'
+                                  ? '오답입니다'
+                                  : '답을 입력하거나 선택해 보세요'}
+                            </div>
+
+                            {currentQuizItem.type === 'mcq' && currentQuizItem.options?.length ? (
+                              <div className="quizChoiceList">
+                                {currentQuizItem.options.map((option, optionIndex) => {
+                                  const selected = currentQuizAnswer === option;
+                                  return (
+                                    <button
+                                      key={`${currentQuizItem.question}-${optionIndex}`}
+                                      type="button"
+                                      className={`quizChoice ${selected ? 'selected' : ''} ${selected && currentQuizStatus !== 'unanswered' ? currentQuizStatus : ''}`}
+                                      onClick={() => setQuizAnswer(currentQuizIndex, option)}
+                                      disabled={quizSubmitted}
+                                    >
+                                      {optionIndex + 1}. {option}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : currentQuizItem.type === 'ox' ? (
+                              <div className="quizChoiceList row">
+                                {['O', 'X'].map((option) => {
+                                  const selected = currentQuizAnswer === option;
+                                  return (
+                                    <button
+                                      key={`${currentQuizItem.question}-${option}`}
+                                      type="button"
+                                      className={`quizChoice ${selected ? 'selected' : ''} ${selected && currentQuizStatus !== 'unanswered' ? currentQuizStatus : ''}`}
+                                      onClick={() => setQuizAnswer(currentQuizIndex, option)}
+                                      disabled={quizSubmitted}
+                                    >
+                                      {option}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <input
+                                className={`input quizInput ${currentQuizStatus !== 'unanswered' ? `quizInput-${currentQuizStatus}` : ''}`}
+                                value={currentQuizAnswer}
+                                onChange={(event) => setQuizAnswer(currentQuizIndex, event.target.value)}
+                                disabled={quizSubmitted}
+                                placeholder="정답을 짧게 입력하세요"
+                              />
+                            )}
                           </div>
                         ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="dropZone">
-                    <div className="dropZoneTitle">퀴즈를 준비 중입니다</div>
-                    <div className="muted">PDF를 분석해 중요한 부분만 골라 간단한 한국어 퀴즈를 만듭니다.</div>
-                  </div>
-                )}
 
-                {activeQuizItems.length ? (
-                  <div className="quizActions">
-                    <button className="button secondary" type="button" onClick={goToPreviousQuiz} disabled={quizSubmitted || currentQuizIndex === 0}>
-                      이전 문제
-                    </button>
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={goToNextQuiz}
-                      disabled={quizSubmitted || !currentQuizAnswer.trim()}
-                    >
-                      {currentQuizIndex === activeQuizItems.length - 1 ? '결과 보기' : '다음 문제'}
-                    </button>
-                    {quizSubmitted && wrongNotes.length ? (
-                      <button className="button secondary" type="button" onClick={startWrongRetryExam}>
-                        오답만 재시험 보기
-                      </button>
-                    ) : null}
-                    {(quizSubmitted || retryQuizMode) ? (
+                      <div className="quizActions">
+                        <button className="button secondary" type="button" onClick={goToQuizHome}>
+                          학습 홈
+                        </button>
+                        <button className="button secondary" type="button" onClick={goToPreviousQuiz} disabled={quizSubmitted || currentQuizIndex === 0}>
+                          이전 문제
+                        </button>
+                        <button
+                          className="button"
+                          type="button"
+                          onClick={goToNextQuiz}
+                          disabled={quizSubmitted || !currentQuizAnswer.trim()}
+                        >
+                          {currentQuizIndex === activeQuizItems.length - 1 ? '결과 보기' : '다음 문제'}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="dropZone">
+                      <div className="dropZoneTitle">학습할 퀴즈가 없습니다</div>
+                      <div className="muted">먼저 학습 홈에서 PDF 기반 퀴즈를 생성해 주세요.</div>
+                    </div>
+                  )
+                ) : (
+                  <>
+                    <div className="quizResultsWrap">
+                      <div className="quizResultsHero">
+                        <div className="quizResultsHeroTop">
+                          <div>
+                            <div className="sectionTitle">{retryQuizMode ? '오답 복습 결과' : '퀴즈 학습 결과'}</div>
+                            <div className="muted">
+                              {wrongCount
+                                ? '틀린 문제를 중심으로 다시 학습하면 훨씬 빠르게 약점을 줄일 수 있습니다.'
+                                : '모든 문제를 정확히 맞혔습니다. 같은 범위의 다른 PDF도 이어서 학습해 볼 수 있어요.'}
+                            </div>
+                          </div>
+                          <div className="quizResultsScore">{quizAccuracy}%</div>
+                        </div>
+
+                        <div className="quizResultsStats">
+                          <div className="quizResultsStatCard primary">
+                            <div className="quizResultsStatLabel">정답</div>
+                            <div className="quizResultsStatValue">{correctCount}</div>
+                          </div>
+                          <div className="quizResultsStatCard">
+                            <div className="quizResultsStatLabel">복습 필요</div>
+                            <div className="quizResultsStatValue">{wrongCount}</div>
+                          </div>
+                          <div className="quizResultsStatCard">
+                            <div className="quizResultsStatLabel">전체 문항</div>
+                            <div className="quizResultsStatValue">{totalQuizCount}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {weakStudyPoints.length ? (
+                        <div className="quizInsightsCard">
+                          <div className="quizFlowTitle">이번에 다시 볼 개념</div>
+                          <div className="quizFlowList">
+                            {weakStudyPoints.map((point, index) => (
+                              <div key={`${point}-${index}`} className="quizFlowItem">{index + 1}. {point}</div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="quizSummary">모든 문제를 맞혔습니다. 훌륭해요.</div>
+                      )}
+
+                      {wrongNotes.length ? (
+                        <div className="wrongNoteWrap">
+                          <div className="sectionTitle">오답노트</div>
+                          <div className="muted">틀린 문제 {wrongNotes.length}개, 맞힌 문제 {activeQuizItems.length - wrongNotes.length}개입니다.</div>
+                          <div className="wrongNoteList">
+                            {wrongNotes.map((note, idx) => (
+                              <div key={`${note.question}-${idx}`} className="wrongNoteItem">
+                                <div className="quizQ">문제: {note.question}</div>
+                                <div className="quizMeta">내 답: {note.userAnswer}</div>
+                                <div className="quizMeta">정답: {note.correctAnswer}</div>
+                                {note.source ? <div className="quizMeta">핵심 근거: {note.source}</div> : null}
+                                {note.hint ? <div className="quizHint">복습 힌트: {note.hint}</div> : null}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="quizActions">
+                      {wrongNotes.length ? (
+                        <button className="button secondary" type="button" onClick={startWrongRetryExam}>
+                          오답만 재시험 보기
+                        </button>
+                      ) : null}
                       <button className="button secondary" type="button" onClick={resetFullQuiz}>
                         전체 퀴즈 다시 풀기
                       </button>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {quizSubmitted ? (
-                  wrongNotes.length ? (
-                    <div className="wrongNoteWrap">
-                      <div className="sectionTitle">오답노트</div>
-                      <div className="muted">틀린 문제 {wrongNotes.length}개, 맞힌 문제 {activeQuizItems.length - wrongNotes.length}개입니다.</div>
-                      <div className="wrongNoteList">
-                        {wrongNotes.map((note, idx) => (
-                          <div key={`${note.question}-${idx}`} className="wrongNoteItem">
-                            <div className="quizQ">문제: {note.question}</div>
-                            <div className="quizMeta">내 답: {note.userAnswer}</div>
-                            <div className="quizMeta">정답: {note.correctAnswer}</div>
-                            {note.hint ? <div className="quizHint">복습 힌트: {note.hint}</div> : null}
-                          </div>
-                        ))}
-                      </div>
+                      <button className="button" type="button" onClick={goToQuizHome}>
+                        학습 홈으로
+                      </button>
                     </div>
-                  ) : (
-                    <div className="quizSummary">모든 문제를 맞혔습니다. 훌륭해요.</div>
-                  )
-                ) : null}
+                  </>
+                )}
               </div>
             )}
           </form>
