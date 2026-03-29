@@ -37,7 +37,15 @@ export async function readStoredFile(storageKeyOrPath: string, publicUrl?: strin
     return Buffer.from(arr);
   }
   if (storageKeyOrPath.startsWith('/')) {
-    return fs.readFile(storageKeyOrPath);
+    try {
+      return await fs.readFile(storageKeyOrPath);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code !== 'ENOENT') throw error;
+
+      const recoveredPath = path.join(uploadRoot, path.basename(storageKeyOrPath));
+      return fs.readFile(recoveredPath);
+    }
   }
   if (publicUrl && /^https?:\/\//.test(publicUrl)) {
     const res = await fetch(publicUrl);
