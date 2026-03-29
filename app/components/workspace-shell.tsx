@@ -1635,26 +1635,18 @@ export function WorkspaceShell({
             >
               {themeMode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <AuthControls />
-            <div className="billingMini">
-              <div className="billingBalance">크레딧 {loadingBalance ? '불러오는 중...' : Number(creditBalance || '0').toLocaleString()}</div>
-              <button className="button secondary" type="button" onClick={() => void quickCharge()}>
-                + 충전
-              </button>
-              <label className="autoRechargeToggle">
-                <input
-                  type="checkbox"
-                  checked={autoRechargeEnabled}
-                  onChange={(event) => {
-                    void toggleAutoRecharge(event.target.checked);
-                  }}
-                />
-                자동충전
-              </label>
-            </div>
+            <AuthControls
+              loadingBalance={loadingBalance}
+              creditBalance={creditBalance}
+              billingStatus={billingStatus}
+              autoRechargeEnabled={autoRechargeEnabled}
+              onQuickCharge={() => void quickCharge()}
+              onToggleAutoRecharge={(checked) => {
+                void toggleAutoRecharge(checked);
+              }}
+            />
           </div>
         </div>
-        {billingStatus ? <div className="muted">{billingStatus}</div> : null}
 
         <div className="workspaceStudio">
           <div

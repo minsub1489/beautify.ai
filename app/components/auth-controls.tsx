@@ -1,14 +1,33 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, LogOut } from 'lucide-react';
 import { getProviders, signIn, signOut, useSession } from 'next-auth/react';
 
 type ProviderMap = Record<string, { id: string; name: string }>;
 
-export function AuthControls() {
+type AuthControlsProps = {
+  loadingBalance: boolean;
+  creditBalance: string;
+  billingStatus?: string;
+  autoRechargeEnabled: boolean;
+  onQuickCharge: () => void;
+  onToggleAutoRecharge: (checked: boolean) => void;
+};
+
+export function AuthControls({
+  loadingBalance,
+  creditBalance,
+  billingStatus,
+  autoRechargeEnabled,
+  onQuickCharge,
+  onToggleAutoRecharge,
+}: AuthControlsProps) {
   const { data: session, status } = useSession();
   const [providers, setProviders] = useState<ProviderMap>({});
   const [loadingProviders, setLoadingProviders] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -28,8 +47,23 @@ export function AuthControls() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (menuRef.current && event.target instanceof Node && !menuRef.current.contains(event.target)) {
+        setMenuOpen(false);
+      }
+    }
+
+    window.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [menuOpen]);
+
   const oauthButtons = useMemo(
-    () => [{ id: 'google', label: 'Google 로그인' }].filter((button) => providers[button.id]),
+    () => [{ id: 'google', label: '로그인' }].filter((button) => providers[button.id]),
     [providers],
   );
 
@@ -38,12 +72,57 @@ export function AuthControls() {
   }
 
   if (session?.user) {
+    const displayName = session.user.name || session.user.email || '사용자';
+    const avatarInitial = displayName.trim().charAt(0).toUpperCase() || 'U';
+
     return (
-      <div className="authControls">
-        <div className="authStatus">{session.user.name || session.user.email || '로그인 사용자'}</div>
-        <button className="button secondary" type="button" onClick={() => void signOut({ callbackUrl: '/' })}>
-          로그아웃
+      <div className="authControls accountControls" ref={menuRef}>
+        <button
+          className={`accountButton ${menuOpen ? 'open' : ''}`}
+          type="button"
+          onClick={() => setMenuOpen((prev) => !prev)}
+          aria-expanded={menuOpen}
+          aria-label="마이페이지 열기"
+        >
+          <div className="accountAvatar" aria-hidden="true">
+            {session.user.image ? <img src={session.user.image} alt="" className="accountAvatarImage" referrerPolicy="no-referrer" /> : avatarInitial}
+          </div>
+          <div className="accountButtonText">
+            <div className="accountButtonName">{displayName}</div>
+          </div>
+          <ChevronDown size={16} className={`accountButtonChevron ${menuOpen ? 'open' : ''}`} />
         </button>
+
+        {menuOpen ? (
+          <div className="accountPanel">
+            <div className="accountProfile">
+              <div className="accountProfileName">{displayName}</div>
+              {session.user.email ? <div className="accountProfileEmail">{session.user.email}</div> : null}
+            </div>
+
+            <div className="accountBillingCard">
+              <div className="billingBalance">크레딧 {loadingBalance ? '불러오는 중...' : Number(creditBalance || '0').toLocaleString()}</div>
+              <button className="button secondary" type="button" onClick={onQuickCharge}>
+                + 충전
+              </button>
+              <label className="autoRechargeToggle">
+                <input
+                  type="checkbox"
+                  checked={autoRechargeEnabled}
+                  onChange={(event) => onToggleAutoRecharge(event.target.checked)}
+                />
+                자동충전
+              </label>
+            </div>
+
+            {billingStatus ? <div className="authStatus">{billingStatus}</div> : null}
+
+            <button className="button secondary accountLogoutButton" type="button" onClick={() => void signOut({ callbackUrl: '/' })}>
+              <LogOut size={16} />
+              로그아웃
+            </button>
+          </div>
+        ) : null}
       </div>
     );
   }

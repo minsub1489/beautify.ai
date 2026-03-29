@@ -517,10 +517,107 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 .viewToggleButton.active { background: linear-gradient(135deg, var(--pink-1) 0%, var(--pink-4) 58%, var(--pink-6) 100%); color: #fff; box-shadow: 0 10px 22px rgba(236, 72, 153, 0.2); }
 .authControls { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .authStatus { font-size: 12px; color: var(--muted); padding: 0 4px; }
-.billingMini { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 14px; border: 1px solid rgba(236,72,153,0.16); background: linear-gradient(135deg, rgba(255,255,255,0.76) 0%, rgba(255,241,247,0.96) 100%); }
+.accountControls { position: relative; }
+.accountButton {
+  border: 1px solid rgba(236,72,153,0.16);
+  background: linear-gradient(135deg, rgba(255,255,255,0.94) 0%, rgba(255,240,248,0.96) 100%);
+  color: var(--text);
+  border-radius: 16px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  min-width: 0;
+  box-shadow: 0 10px 24px rgba(236, 72, 153, 0.12);
+}
+.accountButton.open {
+  border-color: rgba(236,72,153,0.28);
+  box-shadow: 0 14px 30px rgba(236, 72, 153, 0.16);
+}
+.accountAvatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--pink-1) 0%, var(--pink-4) 60%, var(--pink-6) 100%);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 800;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.accountAvatarImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.accountButtonText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.accountButtonName {
+  max-width: 164px;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.accountButtonChevron {
+  color: #9d174d;
+  transition: transform .18s ease;
+  flex: 0 0 auto;
+}
+.accountButtonChevron.open { transform: rotate(180deg); }
+.accountPanel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 80;
+  width: min(320px, calc(100vw - 32px));
+  border-radius: 20px;
+  border: 1px solid rgba(236,72,153,0.16);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(255,244,249,0.98) 100%);
+  box-shadow: 0 24px 48px rgba(35, 28, 54, 0.16);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  backdrop-filter: blur(18px);
+}
+.accountProfile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.accountProfileName {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+.accountProfileEmail {
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+}
+.accountBillingCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(236,72,153,0.14);
+  background: linear-gradient(135deg, rgba(255,255,255,0.92) 0%, rgba(255,240,248,0.96) 100%);
+  padding: 12px;
+}
 .billingBalance { font-size: 13px; font-weight: 700; color: #be185d; white-space: nowrap; }
 .autoRechargeToggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .autoRechargeToggle input { width: 14px; height: 14px; }
+.accountLogoutButton { width: 100%; justify-content: center; }
 .sidebarToggleFixed {
   position: fixed;
   top: 14px;
@@ -646,7 +743,9 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   .viewToggle { width: 100%; justify-content: space-between; }
   .viewToggleButton { flex: 1; }
   .authControls { width: 100%; justify-content: flex-end; }
-  .billingMini { width: 100%; justify-content: space-between; }
+  .accountControls { width: 100%; }
+  .accountButton { width: 100%; justify-content: space-between; }
+  .accountPanel { width: 100%; position: static; }
   .composerRow { flex-direction: column; align-items: stretch; }
   .composerActions { justify-content: space-between; }
   .generationRangeInputs { flex-direction: column; align-items: stretch; }
@@ -852,11 +951,6 @@ pre {
   background: #fff;
   color: #133080;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.14);
-}
-
-.billingMini {
-  border: 1px solid var(--line);
-  background: #fbfcff;
 }
 
 .billingBalance {
@@ -1442,11 +1536,32 @@ pre {
 }
 
 [data-theme='dark'] .iconButton,
-[data-theme='dark'] .billingMini,
+[data-theme='dark'] .accountButton,
 [data-theme='dark'] .viewToggle {
   background: linear-gradient(180deg, rgba(21, 30, 43, 0.96) 0%, rgba(14, 20, 31, 0.98) 100%);
   border-color: rgba(148, 163, 184, 0.14);
   color: #d7e2f3;
+}
+
+[data-theme='dark'] .accountButton.open {
+  border-color: rgba(244, 114, 182, 0.3);
+}
+
+[data-theme='dark'] .accountPanel,
+[data-theme='dark'] .accountBillingCard {
+  background: linear-gradient(180deg, rgba(21, 30, 43, 0.98) 0%, rgba(14, 20, 31, 0.99) 100%);
+  border-color: rgba(148, 163, 184, 0.14);
+  box-shadow: 0 24px 50px rgba(2, 6, 23, 0.34);
+}
+
+[data-theme='dark'] .accountProfileName,
+[data-theme='dark'] .accountButtonName,
+[data-theme='dark'] .billingBalance {
+  color: #f8d4e9;
+}
+
+[data-theme='dark'] .accountButtonChevron {
+  color: #f9a8d4;
 }
 
 [data-theme='dark'] .themeToggleButton {

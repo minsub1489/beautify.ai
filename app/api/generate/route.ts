@@ -4,7 +4,7 @@ import { generateSchema } from '@/lib/validators';
 import { generateAnnotatedNotes, generatePdfReviewQuestions } from '@/lib/ai';
 import { readNotionPageBlocks } from '@/lib/notion';
 import { annotatePdfWithNotes, extractPdfText, extractPdfTextsByPage } from '@/lib/pdf';
-import { putBuffer } from '@/lib/storage';
+import { putBuffer, readStoredFile } from '@/lib/storage';
 import { getCurrentUserId } from '@/lib/auth-user';
 import { ensureBillingBootstrap } from '@/lib/billing/bootstrap';
 import { beginAiUsage, failAiUsage, finalizeAiUsage } from '@/lib/billing/usage';
@@ -44,16 +44,7 @@ function decodeText(bytes: Buffer) {
 }
 
 async function readPdfAssetBytes(asset: { storageKey: string; publicUrl: string }) {
-  if (asset.storageKey.startsWith('/')) {
-    const { readStoredFile } = await import('@/lib/storage');
-    return readStoredFile(asset.storageKey);
-  }
-
-  const response = await fetch(asset.publicUrl);
-  if (!response.ok) {
-    throw new Error(`PDF 원본을 불러오지 못했습니다. (status ${response.status})`);
-  }
-  return Buffer.from(await response.arrayBuffer());
+  return readStoredFile(asset.storageKey, asset.publicUrl);
 }
 
 function parseRequestedPageRange(input: {

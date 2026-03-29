@@ -7,16 +7,7 @@ import { deleteStoredFile, putBuffer, readStoredFile } from '@/lib/storage';
 type MergePosition = 'before' | 'after';
 
 async function readPdfAssetBytes(asset: { storageKey: string; publicUrl: string }) {
-  if (asset.storageKey.startsWith('/')) {
-    return readStoredFile(asset.storageKey);
-  }
-
-  const response = await fetch(asset.publicUrl);
-  if (!response.ok) {
-    throw new Error(`PDF 원본을 불러오지 못했습니다. (status ${response.status})`);
-  }
-
-  return Buffer.from(await response.arrayBuffer());
+  return readStoredFile(asset.storageKey, asset.publicUrl);
 }
 
 function normalizeMergePosition(raw: FormDataEntryValue | null): MergePosition | null {
