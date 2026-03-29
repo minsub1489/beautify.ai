@@ -11,7 +11,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   }
 
   try {
-    const bytes = await readStoredFile(asset.storageKey);
+    const bytes = await readStoredFile(asset.storageKey, asset.publicUrl);
     return new NextResponse(bytes, {
       status: 200,
       headers: {

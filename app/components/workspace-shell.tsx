@@ -61,11 +61,6 @@ type QuizItem = {
   correctOptionIndex?: number;
 };
 
-type PageNoteItem = {
-  page: number;
-  notes: string;
-};
-
 type PageEditorItem = {
   id: string;
   sourcePage: number;
@@ -138,22 +133,6 @@ function parseQuizItems(raw: unknown): QuizItem[] {
     })
     .filter((item): item is QuizItem => Boolean(item));
   return parsed;
-}
-
-function parsePageNotes(raw: unknown): PageNoteItem[] {
-  if (!Array.isArray(raw)) return [];
-
-  return raw
-    .map((item): PageNoteItem | null => {
-      if (!item || typeof item !== 'object') return null;
-      const record = item as Record<string, unknown>;
-      const page = typeof record.page === 'number' ? record.page : Number(record.page);
-      const notes = sanitizeText(record.notes);
-      if (!Number.isFinite(page) || page <= 0 || !notes) return null;
-      return { page, notes };
-    })
-    .filter((item): item is PageNoteItem => Boolean(item))
-    .sort((a, b) => a.page - b.page);
 }
 
 function normalizeForCompare(text: string) {
@@ -319,8 +298,6 @@ export function WorkspaceShell({
   const [notesRangeEnd, setNotesRangeEnd] = useState('1');
   const [quizRangeStart, setQuizRangeStart] = useState('1');
   const [quizRangeEnd, setQuizRangeEnd] = useState('1');
-  const [regeneratingPage, setRegeneratingPage] = useState<number | null>(null);
-  const [pageRegenerationStatus, setPageRegenerationStatus] = useState('');
   const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [wrongNotes, setWrongNotes] = useState<WrongAnswerNote[]>([]);
@@ -362,7 +339,6 @@ export function WorkspaceShell({
   );
 
   const quizItems = useMemo(() => parseQuizItems(selectedProject?.lastRun?.questionsJson), [selectedProject?.lastRun?.questionsJson]);
-  const pageNotes = useMemo(() => parsePageNotes(selectedProject?.lastRun?.notesByPageJson), [selectedProject?.lastRun?.notesByPageJson]);
   const activeQuizItems = useMemo(() => (retryQuizMode ? retryQuizItems : quizItems), [quizItems, retryQuizItems, retryQuizMode]);
   const currentQuizItem = activeQuizItems[currentQuizIndex];
   const currentQuizAnswer = quizAnswers[currentQuizIndex] || '';
@@ -530,8 +506,6 @@ export function WorkspaceShell({
     setTranslationStatus('');
     setPdfRemoving(false);
     setPdfRemoveStatus('');
-    setRegeneratingPage(null);
-    setPageRegenerationStatus('');
     setPdfEditMode(false);
     setPdfPageItems([]);
     setPdfPageInitialOrder([]);
@@ -949,35 +923,6 @@ export function WorkspaceShell({
     }
   }
 
-  async function regeneratePageNote(page: number) {
-    if (!selectedProject?.id || regeneratingPage !== null) return;
-
-    setRegeneratingPage(page);
-    setPageRegenerationStatus(`${page}페이지 필기를 다시 생성하는 중...`);
-    try {
-      const response = await fetch(`/api/projects/${selectedProject.id}/notes/regenerate`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ page }),
-      });
-      const payload = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        setPageRegenerationStatus(typeof payload?.error === 'string' ? payload.error : '페이지 필기를 다시 생성하지 못했습니다.');
-        return;
-      }
-
-      setTranslatedAssetId('');
-      setTranslationMode('original');
-      setPageRegenerationStatus(`${page}페이지 필기를 다시 생성했습니다.`);
-      router.refresh();
-    } catch {
-      setPageRegenerationStatus('페이지 필기 재생성 중 네트워크 오류가 발생했습니다.');
-    } finally {
-      setRegeneratingPage(null);
-    }
-  }
-
   async function saveProjectTitle() {
     if (!selectedProject?.id) return;
     const nextTitle = titleDraft.trim();
@@ -1339,7 +1284,6 @@ export function WorkspaceShell({
       setRetryQuizItems([]);
       setCurrentQuizIndex(0);
       setQuizAutoStatus('');
-      setPageRegenerationStatus('');
       setPdfEditMode(false);
       resetPdfDragState();
       setPdfPageStatus('페이지 편집을 적용했습니다. 최신 PDF로 화면을 갱신합니다.');
@@ -2132,8 +2076,6 @@ export function WorkspaceShell({
                 ) : null}
 
                 {generationStatus ? <div className="muted">상태: {generationStatus}</div> : null}
-                {pageRegenerationStatus ? <div className="muted">상태: {pageRegenerationStatus}</div> : null}
-
                 <div className="row">
                   {quickPrompts.map((prompt) => (
                     <button key={prompt} className="chip" type="button" onClick={() => setNoteDraft((prev) => (prev ? `${prev}\n${prompt}` : prompt))} disabled={isGenerating}>
@@ -2141,31 +2083,6 @@ export function WorkspaceShell({
                     </button>
                   ))}
                 </div>
-
-                {pageNotes.length ? (
-                  <div className="pageNotePanel">
-                    <div className="sectionTitle">PDF 위 필기 다시 생성</div>
-                    <div className="muted">마음에 들지 않는 페이지는 해당 페이지의 PDF 필기만 다시 만들어서 새 필기 PDF에 바로 반영합니다.</div>
-                    <div className="pageNoteList">
-                      {pageNotes.map((item) => (
-                        <div key={item.page} className="pageNoteItem">
-                          <div className="pageNoteTop">
-                            <div className="pageNoteTitle">{item.page}페이지</div>
-                            <button
-                              type="button"
-                              className="button secondary"
-                              disabled={regeneratingPage !== null}
-                              onClick={() => void regeneratePageNote(item.page)}
-                            >
-                              {regeneratingPage === item.page ? '다시 생성 중...' : '이 페이지 다시 생성'}
-                            </button>
-                          </div>
-                          <div className="muted">현재 생성된 필기는 중앙 PDF 미리보기 안에 직접 삽입됩니다.</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
 
               </>
             ) : (

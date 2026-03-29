@@ -29,14 +29,21 @@ export async function putBuffer(params: {
   return { storageKey: fullPath, publicUrl: `${process.env.APP_BASE_URL ?? ''}/api/local-file?path=${encodeURIComponent(fullPath)}` };
 }
 
-export async function readStoredFile(storageKeyOrPath: string) {
+export async function readStoredFile(storageKeyOrPath: string, publicUrl?: string) {
   if (/^https?:\/\//.test(storageKeyOrPath)) {
     const res = await fetch(storageKeyOrPath);
+    if (!res.ok) throw new Error(`파일을 읽을 수 없습니다. (status ${res.status})`);
     const arr = await res.arrayBuffer();
     return Buffer.from(arr);
   }
   if (storageKeyOrPath.startsWith('/')) {
     return fs.readFile(storageKeyOrPath);
+  }
+  if (publicUrl && /^https?:\/\//.test(publicUrl)) {
+    const res = await fetch(publicUrl);
+    if (!res.ok) throw new Error(`파일을 읽을 수 없습니다. (status ${res.status})`);
+    const arr = await res.arrayBuffer();
+    return Buffer.from(arr);
   }
   throw new Error('Unsupported storage key');
 }
