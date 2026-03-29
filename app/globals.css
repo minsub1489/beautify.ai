@@ -274,8 +274,8 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   padding: 16px;
   text-align: center;
 }
-.workspaceStudio { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
-.previewCard { min-height: 620px; position: relative; }
+.workspaceStudio { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; position: relative; z-index: 1; }
+.previewCard { min-height: 620px; position: relative; z-index: 1; }
 .previewHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .previewFrameWrap { border: 1px solid rgba(255,255,255,0.66); border-radius: 18px; overflow: hidden; min-height: 540px; background: rgba(255,255,255,0.88); box-shadow: inset 0 0 0 1px rgba(130, 103, 255, 0.08); }
 .previewFrame { width: 100%; height: 72vh; min-height: 540px; border: 0; }
@@ -453,7 +453,7 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 .previewEmpty { min-height: 540px; }
 .liveNotePanel { border: 1px solid rgba(236,72,153,0.18); background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,241,247,0.94) 100%); border-radius: 16px; padding: 12px 14px; }
 .liveNoteLine { color: #1f2f63; font-size: 14px; line-height: 1.6; }
-.chatPanel { min-height: 620px; }
+.chatPanel { min-height: 620px; position: relative; z-index: 1; }
 .chatBox.compact { min-height: 260px; max-height: 420px; }
 .previewDropOverlay { position: absolute; inset: 16px; z-index: 20; border: 2px dashed rgba(236, 72, 153, 0.5); background: linear-gradient(135deg, rgba(255,126,182,0.14) 0%, rgba(244,114,182,0.18) 62%, rgba(216,180,254,0.16) 100%); border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; color: #be185d; pointer-events: none; text-align: center; padding: 16px; }
 
@@ -509,15 +509,15 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 .sidebarProjectTailDrop.dropTarget {
   background: rgba(244, 114, 182, 0.08);
 }
-.workspaceMain { position: relative; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
-.topBar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.topBarActions { display: flex; gap: 8px; align-items: center; }
+.workspaceMain { position: relative; display: flex; flex-direction: column; gap: 18px; min-width: 0; isolation: isolate; }
+.topBar { position: relative; z-index: 120; overflow: visible; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.topBarActions { position: relative; z-index: 140; display: flex; gap: 8px; align-items: center; }
 .viewToggle { display: inline-flex; align-items: center; gap: 4px; padding: 4px; border-radius: 12px; border: 1px solid rgba(236,72,153,0.16); background: linear-gradient(135deg, rgba(255,255,255,0.76) 0%, rgba(255,241,247,0.94) 100%); }
 .viewToggleButton { border: none; background: transparent; color: #4b5565; border-radius: 10px; padding: 8px 12px; font-weight: 700; cursor: pointer; }
 .viewToggleButton.active { background: linear-gradient(135deg, var(--pink-1) 0%, var(--pink-4) 58%, var(--pink-6) 100%); color: #fff; box-shadow: 0 10px 22px rgba(236, 72, 153, 0.2); }
 .authControls { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .authStatus { font-size: 12px; color: var(--muted); padding: 0 4px; }
-.accountControls { position: relative; }
+.accountControls { position: relative; z-index: 220; }
 .accountLoginButton {
   border-color: rgba(37, 99, 235, 0.14);
   background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,249,255,0.98) 100%);
@@ -591,7 +591,7 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
-  z-index: 80;
+  z-index: 500;
   width: min(360px, calc(100vw - 32px));
   border-radius: 26px;
   border: 1px solid rgba(148,163,184,0.18);
@@ -854,11 +854,12 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
 .titleArea { position: relative; padding-left: 0; }
 .sidebarToggleTitleLeft {
   position: fixed;
-  top: 30px;
-  left: 34px;
-  z-index: 180;
+  top: 24px;
+  left: 18px;
+  z-index: 260;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
 }
+.workspaceLayout.sidebarHidden .titleArea { padding-left: 64px; }
 .sidebarResizer {
   position: absolute;
   top: 10px;
@@ -1015,7 +1016,8 @@ pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,25
   .previewEditGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .previewFrameWrap, .previewEmpty, .previewCard, .chatPanel { min-height: auto; }
   .sidebarToggleFixed { top: 12px; left: 12px; }
-  .sidebarToggleTitleLeft { top: 20px; left: 18px; }
+  .sidebarToggleTitleLeft { top: 16px; left: 14px; }
+  .workspaceLayout.sidebarHidden .titleArea { padding-left: 54px; }
   .sidebarResizer { display: none; }
 }
 
