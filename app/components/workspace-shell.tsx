@@ -264,6 +264,13 @@ export function WorkspaceShell({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [sidebarResizing, setSidebarResizing] = useState(false);
+  const [projectItems, setProjectItems] = useState<ProjectItem[]>(projects);
+  const [projectEditMode, setProjectEditMode] = useState(false);
+  const [projectOrderSaving, setProjectOrderSaving] = useState(false);
+  const [projectOrderStatus, setProjectOrderStatus] = useState('');
+  const [draggingProjectId, setDraggingProjectId] = useState('');
+  const [dragOverProjectInsertIndex, setDragOverProjectInsertIndex] = useState<number | null>(null);
+  const [projectDeletingId, setProjectDeletingId] = useState('');
   const [translationMode, setTranslationMode] = useState<'original' | 'translated'>('original');
   const [translationLoading, setTranslationLoading] = useState(false);
   const [translationStatus, setTranslationStatus] = useState('');
@@ -387,6 +394,7 @@ export function WorkspaceShell({
     return `총 ${currentPdfPageCount}페이지 · 카드를 드래그해서 순서를 바꾸고 X로 제거하세요.`;
   }, [currentPdfPageCount, pdfPageItems.length, pdfPageLoading]);
   const pdfEditBusy = pdfPageLoading || pdfPageSaving || pdfMergeLoading;
+  const projectEditBusy = projectOrderSaving || Boolean(projectDeletingId);
 
   const SIDEBAR_MIN = 220;
   const SIDEBAR_MAX = 520;
@@ -454,6 +462,16 @@ export function WorkspaceShell({
     document.documentElement.style.colorScheme = themeMode;
     window.localStorage.setItem('beautify-theme', themeMode);
   }, [themeMode]);
+
+  useEffect(() => {
+    setProjectItems(projects);
+    if (!projects.length) {
+      setProjectEditMode(false);
+      setProjectOrderStatus('');
+      setDraggingProjectId('');
+      setDragOverProjectInsertIndex(null);
+    }
+  }, [projects]);
 
   useEffect(() => {
     return () => {
@@ -1058,6 +1076,108 @@ export function WorkspaceShell({
     return target instanceof HTMLElement && Boolean(target.closest('button'));
   }
 
+  function shouldIgnoreProjectCardDrag(target: EventTarget | null) {
+    return target instanceof HTMLElement && Boolean(target.closest('button'));
+  }
+
+  function resetProjectDragState() {
+    setDraggingProjectId('');
+    setDragOverProjectInsertIndex(null);
+  }
+
+  function moveProjectItems(sourceId: string, targetIndex: number) {
+    const sourceIndex = projectItems.findIndex((project) => project.id === sourceId);
+    if (sourceIndex < 0) return null;
+
+    const boundedTargetIndex = Math.max(0, Math.min(targetIndex, projectItems.length));
+    const next = [...projectItems];
+    const [moved] = next.splice(sourceIndex, 1);
+    const adjustedTargetIndex = sourceIndex < boundedTargetIndex ? boundedTargetIndex - 1 : boundedTargetIndex;
+
+    if (sourceIndex === adjustedTargetIndex) return null;
+
+    next.splice(adjustedTargetIndex, 0, moved);
+    return next;
+  }
+
+  async function persistProjectOrder(nextItems: ProjectItem[], previousItems: ProjectItem[]) {
+    if (projectOrderSaving) return;
+
+    setProjectItems(nextItems);
+    setProjectOrderSaving(true);
+    setProjectOrderStatus('프로젝트 순서를 저장하는 중...');
+
+    try {
+      const response = await fetch('/api/projects', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          projectIds: nextItems.map((project) => project.id),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setProjectItems(previousItems);
+        setProjectOrderStatus(typeof payload?.error === 'string' ? payload.error : '프로젝트 순서를 저장하지 못했습니다.');
+        return;
+      }
+
+      setProjectOrderStatus('프로젝트 순서를 저장했습니다.');
+      router.refresh();
+    } catch {
+      setProjectItems(previousItems);
+      setProjectOrderStatus('프로젝트 순서 저장 중 네트워크 오류가 발생했습니다.');
+    } finally {
+      setProjectOrderSaving(false);
+    }
+  }
+
+  async function deleteProject(projectId: string) {
+    if (projectDeletingId) return;
+    const confirmed = window.confirm('프로젝트를 삭제하시겠습니까?');
+    if (!confirmed) return;
+
+    const previousItems = projectItems;
+    const nextItems = projectItems.filter((project) => project.id !== projectId);
+
+    setProjectDeletingId(projectId);
+    setProjectItems(nextItems);
+    setProjectOrderStatus('프로젝트를 삭제하는 중...');
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: 'DELETE',
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setProjectItems(previousItems);
+        setProjectOrderStatus(typeof payload?.error === 'string' ? payload.error : '프로젝트를 삭제하지 못했습니다.');
+        return;
+      }
+
+      if (!nextItems.length) {
+        setProjectEditMode(false);
+      }
+
+      setProjectOrderStatus('프로젝트를 삭제했습니다.');
+      resetProjectDragState();
+
+      if (selectedProject?.id === projectId) {
+        const nextSelectedId = nextItems[0]?.id;
+        router.push(nextSelectedId ? `/?projectId=${nextSelectedId}` : '/');
+      }
+
+      router.refresh();
+    } catch {
+      setProjectItems(previousItems);
+      setProjectOrderStatus('프로젝트 삭제 중 네트워크 오류가 발생했습니다.');
+    } finally {
+      setProjectDeletingId('');
+    }
+  }
+
   function handleMergePdfSelect(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -1326,6 +1446,19 @@ export function WorkspaceShell({
               </button>
             </form>
             <button
+              className={`iconButton ${projectEditMode ? 'previewModeButtonActive' : ''}`}
+              type="button"
+              aria-label={projectEditMode ? '프로젝트 편집 닫기' : '프로젝트 편집 열기'}
+              onClick={() => {
+                setProjectEditMode((prev) => !prev);
+                resetProjectDragState();
+                setProjectOrderStatus('');
+              }}
+              disabled={projectEditBusy}
+            >
+              <Pencil size={16} />
+            </button>
+            <button
               className="iconButton sidebarToggleAttached"
               type="button"
               aria-label="사이드바 접기"
@@ -1335,22 +1468,108 @@ export function WorkspaceShell({
             </button>
           </div>
         </div>
-        <div className="sidebarList">
-          {projects.map((project) => (
-            <Link
-              key={project.id}
-              href={`/?projectId=${project.id}`}
-              className={`sidebarItem ${selectedProject?.id === project.id ? 'active' : ''}`}
-              title={project.title}
-            >
-              <div className="sidebarItemTitle">{project.title}</div>
-              <div className="sidebarItemMeta">
-                <span>{project.subject || '과목 자동 분석'}</span>
-                <span>자료 {project.assetCount}</span>
+        {projectEditMode ? <div className="muted">프로젝트를 드래그해서 순서를 바꾸고, 오른쪽 위 X로 삭제하세요.</div> : null}
+        {projectOrderStatus ? <div className="muted">{projectOrderStatus}</div> : null}
+        <div className={`sidebarList ${projectEditMode ? 'sidebarProjectEditList' : ''}`}>
+          {projectEditMode ? (
+            <>
+              {projectItems.map((project, index) => (
+                <div
+                  key={project.id}
+                  className={`sidebarProjectCell ${dragOverProjectInsertIndex === index ? 'dropTarget' : ''}`}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    if (draggingProjectId) {
+                      setDragOverProjectInsertIndex(index);
+                    }
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const sourceId = event.dataTransfer.getData('text/plain') || draggingProjectId;
+                    const nextItems = moveProjectItems(sourceId, index);
+                    resetProjectDragState();
+                    if (!nextItems) return;
+                    void persistProjectOrder(nextItems, projectItems);
+                  }}
+                >
+                  {dragOverProjectInsertIndex === index ? <div className="sidebarProjectInsertMarker" aria-hidden="true" /> : null}
+                  <div
+                    className={`sidebarItem sidebarProjectItem ${selectedProject?.id === project.id ? 'active' : ''} ${draggingProjectId === project.id ? 'dragging' : ''}`}
+                    draggable={!projectEditBusy}
+                    onDragStart={(event) => {
+                      if (shouldIgnoreProjectCardDrag(event.target)) {
+                        event.preventDefault();
+                        return;
+                      }
+                      event.dataTransfer.effectAllowed = 'move';
+                      event.dataTransfer.setData('text/plain', project.id);
+                      setDraggingProjectId(project.id);
+                      setDragOverProjectInsertIndex(index);
+                    }}
+                    onDragEnd={resetProjectDragState}
+                  >
+                    <button
+                      type="button"
+                      className="pageEditorRemove sidebarProjectRemove"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void deleteProject(project.id);
+                      }}
+                      disabled={projectEditBusy}
+                      draggable={false}
+                      aria-label={`${project.title} 삭제`}
+                      title="프로젝트 삭제"
+                    >
+                      <X size={14} />
+                    </button>
+                    <div className="sidebarItemTitle">{project.title}</div>
+                    <div className="sidebarItemMeta">
+                      <span>{project.subject || '과목 자동 분석'}</span>
+                      <span>자료 {project.assetCount}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div
+                className={`sidebarProjectTailDrop ${dragOverProjectInsertIndex === projectItems.length ? 'dropTarget' : ''}`}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  if (draggingProjectId) {
+                    setDragOverProjectInsertIndex(projectItems.length);
+                  }
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const sourceId = event.dataTransfer.getData('text/plain') || draggingProjectId;
+                  const nextItems = moveProjectItems(sourceId, projectItems.length);
+                  resetProjectDragState();
+                  if (!nextItems) return;
+                  void persistProjectOrder(nextItems, projectItems);
+                }}
+              >
+                {dragOverProjectInsertIndex === projectItems.length ? <div className="sidebarProjectInsertMarker" aria-hidden="true" /> : null}
               </div>
-            </Link>
-          ))}
-          {!projects.length ? <div className="emptyHint">아직 프로젝트가 없습니다.</div> : null}
+            </>
+          ) : (
+            <>
+              {projectItems.map((project) => (
+                <Link
+                  key={project.id}
+                  href={`/?projectId=${project.id}`}
+                  className={`sidebarItem ${selectedProject?.id === project.id ? 'active' : ''}`}
+                  title={project.title}
+                >
+                  <div className="sidebarItemTitle">{project.title}</div>
+                  <div className="sidebarItemMeta">
+                    <span>{project.subject || '과목 자동 분석'}</span>
+                    <span>자료 {project.assetCount}</span>
+                  </div>
+                </Link>
+              ))}
+            </>
+          )}
+          {!projectItems.length ? <div className="emptyHint">아직 프로젝트가 없습니다.</div> : null}
         </div>
         <div
           className="sidebarResizer"

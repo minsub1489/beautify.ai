@@ -9,7 +9,7 @@ export default async function HomePage({
   const resolvedParams = (await searchParams) || {};
 
   const projects = await prisma.project.findMany({
-    orderBy: { updatedAt: 'desc' },
+    orderBy: [{ sortOrder: 'asc' }, { updatedAt: 'desc' }],
     include: {
       assets: true,
       runs: { orderBy: { createdAt: 'desc' }, take: 1, include: { outputAsset: true } },

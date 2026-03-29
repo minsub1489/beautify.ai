@@ -2,6 +2,49 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createProjectSchema } from '@/lib/validators';
 
+async function getNextProjectSortOrder() {
+  const latest = await prisma.project.findFirst({
+    orderBy: { sortOrder: 'desc' },
+    select: { sortOrder: true },
+  });
+  return (latest?.sortOrder ?? -1) + 1;
+}
+
+export async function PATCH(req: Request) {
+  const body = await req.json().catch(() => ({})) as { projectIds?: unknown };
+  const rawProjectIds = Array.isArray(body.projectIds) ? body.projectIds : [];
+  const projectIds = rawProjectIds.filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0);
+
+  if (!projectIds.length) {
+    return NextResponse.json({ error: '정렬할 프로젝트 목록이 비어 있습니다.' }, { status: 400 });
+  }
+
+  const uniqueProjectIds = [...new Set(projectIds)];
+  if (uniqueProjectIds.length !== projectIds.length) {
+    return NextResponse.json({ error: '중복된 프로젝트가 포함되어 있습니다.' }, { status: 400 });
+  }
+
+  const existing = await prisma.project.findMany({
+    where: { id: { in: uniqueProjectIds } },
+    select: { id: true },
+  });
+
+  if (existing.length !== uniqueProjectIds.length) {
+    return NextResponse.json({ error: '일부 프로젝트를 찾을 수 없습니다.' }, { status: 404 });
+  }
+
+  await prisma.$transaction(
+    uniqueProjectIds.map((projectId, index) =>
+      prisma.project.update({
+        where: { id: projectId },
+        data: { sortOrder: index },
+      })
+    ),
+  );
+
+  return NextResponse.json({ ok: true, projectIds: uniqueProjectIds }, { status: 200 });
+}
+
 export async function POST(req: Request) {
   const contentType = req.headers.get('content-type') || '';
 
@@ -17,7 +60,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const project = await prisma.project.create({ data: parsed.data });
+    const project = await prisma.project.create({
+      data: {
+        ...parsed.data,
+        sortOrder: await getNextProjectSortOrder(),
+      },
+    });
     return NextResponse.json({ project });
   }
 
@@ -32,6 +80,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const project = await prisma.project.create({ data: parsed.data });
+  const project = await prisma.project.create({
+    data: {
+      ...parsed.data,
+      sortOrder: await getNextProjectSortOrder(),
+    },
+  });
   return NextResponse.redirect(new URL(`/?projectId=${project.id}`, req.url), 303);
 }
