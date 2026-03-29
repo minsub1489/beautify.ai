@@ -4,9 +4,23 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { ChevronLeft, ChevronRight, Download, Languages, Moon, Paperclip, Pencil, Plus, Sun, Trash2, UploadCloud, X } from 'lucide-react';
 import { AuthControls } from './auth-controls';
-import { PdfPreviewViewer } from './pdf-preview-viewer';
+
+const PdfPreviewViewer = dynamic(
+  () => import('./pdf-preview-viewer').then((mod) => mod.PdfPreviewViewer),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="pdfViewerShell">
+        <div className="pdfViewerViewport">
+          <div className="pdfViewerOverlay">PDF 뷰어를 준비하는 중...</div>
+        </div>
+      </div>
+    ),
+  },
+);
 
 type ProjectItem = {
   id: string;
