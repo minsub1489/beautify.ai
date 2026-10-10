@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="480" height="76" viewBox="0 0 480 76" role="img" aria-labelledby="title desc">
-<title id="title">Visit Minsub Kim's portfolio</title><desc id="desc">Minsub Kim portfolio visual identity in black and gold.</desc>
-<defs><radialGradient id="glow"><stop stop-color="#D6AD60" stop-opacity=".17"/><stop offset="1" stop-color="#D6AD60" stop-opacity="0"/></radialGradient><linearGradient id="gold" x2="1" y2="1"><stop stop-color="#E8C987"/><stop offset="1" stop-color="#A77837"/></linearGradient></defs>
-<rect width="480" height="76" rx="12" fill="#050505"/><rect x=".5" y=".5" width="479" height="75" rx="11.5" fill="none" stroke="#D6AD60" stroke-opacity=".24"/>
-<g font-family="Arial, Helvetica, sans-serif"><rect x="1" y="1" width="478" height="74" rx="11" fill="#D6AD60"/><text x="27" y="46" fill="#050505" font-size="22" font-weight="700" letter-spacing="2">VIEW PORTFOLIO</text><path d="M426 29h17v17m-19 2 19-19" fill="none" stroke="#050505" stroke-width="2.4"/></g></svg>

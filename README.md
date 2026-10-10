@@ -1,17 +1,3 @@
-<!-- MINSUB-BRAND:START -->
-<p align="center">
-  <a href="https://minsub-kim-portfolio.vercel.app/projects/beautify/"><img src=".github/assets/banner.svg" width="1200" alt="Beautify · From documents to understanding."></a>
-</p>
-<p align="center">
-  <a href="https://minsub-kim-portfolio.vercel.app/"><img src=".github/assets/portfolio.svg" width="240" alt="Minsub Kim 포트폴리오 보기"></a>
-</p>
-<p align="center">
-  <a href="https://minsub-kim-portfolio.vercel.app/projects/beautify/">프로젝트 스토리</a> · <a href="https://github.com/minsub1489">개발자 프로필</a> · <a href="https://minsub-kim-portfolio.vercel.app/">포트폴리오</a>
-</p>
-<!-- MINSUB-BRAND:END -->
-
----
-
 # Beautify
 
 Beautify는 PDF 기반 학습 워크스페이스입니다.  
@@ -157,7 +143,7 @@ GOOGLE_CLIENT_SECRET=
 
 ## 설계 문서
 
-- [비회원 PDF 체험 → 회원 전환 시 데이터 보존 설계](docs/guest-to-member-preservation.md)
+- [비회원 PDF 체험 → 회원 전환 시 데이터 보존 설계](/Users/minsub/Documents/beautify-ai/beautify/docs/guest-to-member-preservation.md)
 
 ## 이름
 
